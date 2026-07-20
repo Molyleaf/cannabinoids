@@ -54,3 +54,7 @@ data_source/
 data_preprocessed/
 
 *.npy
+*.pt
+*.msp
+
+known_compound_recognize/positive_idx/
