@@ -106,9 +106,13 @@ def check_spectrum_similarity(
         )
         scores = results.get("open_search", [])
 
-    # 5. 判断是否存在相似度高于阈值的匹配
+    # 5. 判断是否存在相似度高于阈值的匹配并返回对应 SMILES
     if len(scores) > 0:
-        max_score = np.max(scores)
-        return bool(max_score > min_similarity)
-    
+        max_idx = np.argmax(scores)
+        max_score = scores[max_idx]
+        if max_score > min_similarity:
+            # 获取相似度最高的元数据
+            matched_metadata = entropy_search[int(max_idx)]
+            return matched_metadata.get("smiles", "")
+            
     return False

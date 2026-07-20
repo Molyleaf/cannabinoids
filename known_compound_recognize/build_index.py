@@ -46,13 +46,15 @@ def build_positive_index():
         else:
             precursor_mz = float(np.max(peaks[:, 0]))
             
-        # Keep name in metadata
+        # Keep name and smiles in metadata
         name = spec.get("name") or spec.get("Name") or "Unknown"
+        smiles = spec.get("smiles") or spec.get("SMILES") or ""
         
         spectra.append({
             "precursor_mz": precursor_mz,
             "peaks": peaks,
-            "name": name
+            "name": name,
+            "smiles": smiles
         })
         
     print(f"Loaded {len(spectra)} spectra. Building FlashEntropySearch index...")
