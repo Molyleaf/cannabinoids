@@ -1,5 +1,5 @@
 import torch
-from lib.losses import nt_xent_loss
+from simclr_pretrain.lib.losses import nt_xent_loss
 
 def train_step(model, spec, optimizer, augmenter, device, scaler, temperature):
     """进行单步 SimCLR 训练 (联合前向优化版)"""

@@ -1,0 +1,1132 @@
+==================== Cell 1 ====================
+"""
+大麻素 vs 非大麻素 二分类（阳性按SMILES分组，阴性随机划分）
+使用预训练模型: best_model_0716.pt
+文件: binary_classification_with_best_model.py
+"""
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, TensorDataset
+import numpy as np
+import pickle
+import matplotlib.pyplot as plt
+from pathlib import Path
+from tqdm import tqdm
+from collections import Counter, defaultdict
+from sklearn.metrics import (
+    classification_report, confusion_matrix,
+    roc_auc_score, roc_curve, accuracy_score,
+    precision_score, recall_score, f1_score
+)
+import seaborn as sns
+import warnings
+import pandas as pd
+from datetime import datetime
+warnings.filterwarnings('ignore')
+
+
+# ==================== 编码器 ====================
+
+class SpectrumEncoder(nn.Module):
+    def __init__(self, input_dim=561, hidden_dim=256):
+        super().__init__()
+        self.conv_block = nn.Sequential(
+            nn.Conv1d(1, 64, kernel_size=7, padding=3),
+            nn.BatchNorm1d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+            nn.Conv1d(64, 128, kernel_size=5, padding=2),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+            nn.Conv1d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool1d(1)
+        )
+        self.fc = nn.Sequential(
+            nn.Linear(256, hidden_dim),
+            nn.BatchNorm1d(hidden_dim)
+        )
+    
+    def forward(self, x):
+        if x.dim() == 2:
+            x = x.unsqueeze(1)
+        h = self.conv_block(x).squeeze(-1)
+        embed = self.fc(h)
+        return F.normalize(embed, p=2, dim=1)
+
+
+class BinaryClassifier(nn.Module):
+    """二分类头"""
+    def __init__(self, encoder, input_dim=256, freeze_encoder=True):
+        super().__init__()
+        self.encoder = encoder
+        
+        if freeze_encoder:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+        
+        self.classifier = nn.Sequential(
+            nn.Linear(input_dim, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            nn.Linear(64, 1)
+        )
+    
+    def forward(self, x):
+        with torch.set_grad_enabled(not all(p.requires_grad == False 
+                                            for p in self.encoder.parameters())):
+            embed = self.encoder(x)
+        logit = self.classifier(embed)
+        return logit.squeeze(-1)
+
+
+# ==================== 数据解析 ====================
+
+def parse_msp_with_smiles(msp_file, min_peaks=5):
+    """解析MSP文件，返回化合物列表（包含SMILES）"""
+    with open(msp_file, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    
+    compounds = []
+    current_comp = None
+    in_peaks = False
+    
+    for line in lines:
+        line = line.strip()
+        if line.startswith('Name:'):
+            if current_comp is not None and 'peaks' in current_comp:
+                if len(current_comp['peaks']) >= min_peaks:
+                    compounds.append(current_comp)
+            current_comp = {
+                'name': line.split(':', 1)[1].strip(),
+                'smiles': '',
+                'peaks': []
+            }
+            in_peaks = False
+        elif line.startswith('SMILES:'):
+            if current_comp is not None:
+                current_comp['smiles'] = line.split(':', 1)[1].strip()
+        elif line.startswith('Num peaks:'):
+            in_peaks = True
+        elif in_peaks and line:
+            parts = line.replace(';', '').replace('\t', ' ').split()
+            if len(parts) >= 2:
+                try:
+                    mz = float(parts[0])
+                    intensity = float(parts[1])
+                    if mz > 0 and intensity > 0:
+                        current_comp['peaks'].append((mz, intensity))
+                except ValueError:
+                    in_peaks = False
+    
+    if current_comp is not None and 'peaks' in current_comp:
+        if len(current_comp['peaks']) >= min_peaks:
+            compounds.append(current_comp)
+    
+    return compounds
+
+
+def peaks_to_vector(peaks, mz_min=40, mz_max=600):
+    dim = mz_max - mz_min + 1
+    vec = np.zeros(dim)
+    for mz, intensity in peaks:
+        if mz_min <= mz <= mz_max:
+            idx = int(round(mz - mz_min))
+            if 0 <= idx < dim:
+                vec[idx] += intensity
+    return vec
+
+
+def preprocess_spectra(spectra):
+    tic = spectra.sum(axis=1, keepdims=True)
+    spectra = spectra / (tic + 1e-8)
+    spectra = np.sqrt(spectra)
+    return spectra
+
+
+# ==================== 划分函数 ====================
+
+def split_positive_by_smiles_negative_random(
+    pos_indices, neg_indices, 
+    pos_smiles_list, 
+    test_size=0.15, val_size=0.15, 
+    random_state=42
+):
+    """
+    阳性样本：按SMILES分组，同一SMILES的所有谱图在同一集合
+    阴性样本：随机划分
+    """
+    np.random.seed(random_state)
+    
+    # ===== 阳性：按SMILES分组划分 =====
+    pos_unique_smiles = np.unique(pos_smiles_list)
+    n_pos_smiles = len(pos_unique_smiles)
+    
+    shuffled_smiles = pos_unique_smiles.copy()
+    np.random.shuffle(shuffled_smiles)
+    
+    n_pos_test = max(1, int(n_pos_smiles * test_size))
+    n_pos_val = max(1, int(n_pos_smiles * val_size))
+    
+    pos_test_smiles = set(shuffled_smiles[:n_pos_test])
+    pos_val_smiles = set(shuffled_smiles[n_pos_test:n_pos_test + n_pos_val])
+    pos_train_smiles = set(shuffled_smiles[n_pos_test + n_pos_val:])
+    
+    pos_train_idx = [i for i in pos_indices if pos_smiles_list[i] in pos_train_smiles]
+    pos_val_idx = [i for i in pos_indices if pos_smiles_list[i] in pos_val_smiles]
+    pos_test_idx = [i for i in pos_indices if pos_smiles_list[i] in pos_test_smiles]
+    
+    print(f"  阳性SMILES划分:")
+    print(f"    训练: {len(pos_train_smiles)} 种化合物, {len(pos_train_idx)} 张谱图")
+    print(f"    验证: {len(pos_val_smiles)} 种化合物, {len(pos_val_idx)} 张谱图")
+    print(f"    测试: {len(pos_test_smiles)} 种化合物, {len(pos_test_idx)} 张谱图")
+    
+    # 验证无SMILES跨集合重叠
+    overlap_train_test = pos_train_smiles & pos_test_smiles
+    overlap_train_val = pos_train_smiles & pos_val_smiles
+    overlap_val_test = pos_val_smiles & pos_test_smiles
+    if overlap_train_test or overlap_train_val or overlap_val_test:
+        print(f"  ⚠ 警告：阳性SMILES存在跨集合重叠！")
+    else:
+        print(f"  ✓ 阳性SMILES无跨集合重叠")
+    
+    # ===== 阴性：随机划分 =====
+    n_neg = len(neg_indices)
+    neg_shuffled = neg_indices.copy()
+    np.random.shuffle(neg_shuffled)
+    
+    n_neg_test = int(n_neg * test_size)
+    n_neg_val = int(n_neg * val_size)
+    
+    neg_test_idx = neg_shuffled[:n_neg_test].tolist()
+    neg_val_idx = neg_shuffled[n_neg_test:n_neg_test + n_neg_val].tolist()
+    neg_train_idx = neg_shuffled[n_neg_test + n_neg_val:].tolist()
+    
+    print(f"  阴性随机划分:")
+    print(f"    训练: {len(neg_train_idx)} 张谱图")
+    print(f"    验证: {len(neg_val_idx)} 张谱图")
+    print(f"    测试: {len(neg_test_idx)} 张谱图")
+    
+    # 合并
+    train_idx = np.array(pos_train_idx + neg_train_idx)
+    val_idx = np.array(pos_val_idx + neg_val_idx)
+    test_idx = np.array(pos_test_idx + neg_test_idx)
+    
+    np.random.shuffle(train_idx)
+    np.random.shuffle(val_idx)
+    np.random.shuffle(test_idx)
+    
+    return train_idx, val_idx, test_idx
+
+
+# ==================== 训练函数 ====================
+
+def train_binary_classifier(model, train_loader, val_loader,
+                            device, epochs=100, lr=0.001, patience=15):
+    optimizer = torch.optim.AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=lr, weight_decay=1e-4
+    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=5, min_lr=1e-6
+    )
+    criterion = nn.BCEWithLogitsLoss()
+    
+    best_val_loss = float('inf')
+    best_model_state = None
+    patience_counter = 0
+    
+    train_losses, val_losses = [], []
+    train_accs, val_accs = [], []
+    train_aucs, val_aucs = [], []
+    
+    for epoch in range(1, epochs + 1):
+        # ===== 训练 =====
+        model.train()
+        train_loss, train_correct, train_total = 0.0, 0, 0
+        train_probs_all, train_labels_all = [], []
+        
+        for batch_spec, batch_labels in train_loader:
+            batch_spec = batch_spec.to(device)
+            batch_labels = batch_labels.to(device)
+            
+            optimizer.zero_grad()
+            logits = model(batch_spec)
+            loss = criterion(logits, batch_labels)
+            loss.backward()
+            optimizer.step()
+            
+            train_loss += loss.item() * batch_spec.size(0)
+            probs = torch.sigmoid(logits)
+            preds = (probs >= 0.5).float()
+            train_correct += (preds == batch_labels).sum().item()
+            train_total += batch_spec.size(0)
+            
+            train_probs_all.extend(probs.cpu().detach().numpy())
+            train_labels_all.extend(batch_labels.cpu().numpy())
+        
+        avg_train_loss = train_loss / train_total
+        train_acc = train_correct / train_total
+        train_losses.append(avg_train_loss)
+        train_accs.append(train_acc)
+        
+        train_probs_all = np.array(train_probs_all)
+        train_labels_all = np.array(train_labels_all)
+        if len(np.unique(train_labels_all)) >= 2:
+            train_auc = roc_auc_score(train_labels_all, train_probs_all)
+        else:
+            train_auc = 0.5
+        train_aucs.append(train_auc)
+        
+        # ===== 验证 =====
+        model.eval()
+        val_loss, val_correct, val_total = 0.0, 0, 0
+        val_probs_all, val_labels_all = [], []
+        
+        with torch.no_grad():
+            for batch_spec, batch_labels in val_loader:
+                batch_spec = batch_spec.to(device)
+                batch_labels = batch_labels.to(device)
+                
+                logits = model(batch_spec)
+                loss = criterion(logits, batch_labels)
+                
+                val_loss += loss.item() * batch_spec.size(0)
+                probs = torch.sigmoid(logits)
+                preds = (probs >= 0.5).float()
+                val_correct += (preds == batch_labels).sum().item()
+                val_total += batch_spec.size(0)
+                
+                val_probs_all.extend(probs.cpu().numpy())
+                val_labels_all.extend(batch_labels.cpu().numpy())
+        
+        avg_val_loss = val_loss / val_total
+        val_acc = val_correct / val_total
+        val_losses.append(avg_val_loss)
+        val_accs.append(val_acc)
+        
+        val_probs_all = np.array(val_probs_all)
+        val_labels_all = np.array(val_labels_all)
+        if len(np.unique(val_labels_all)) >= 2:
+            val_auc = roc_auc_score(val_labels_all, val_probs_all)
+        else:
+            val_auc = 0.5
+        val_aucs.append(val_auc)
+        
+        scheduler.step(avg_val_loss)
+        
+        if (epoch - 1) % 10 == 0 or epoch == 1:
+            print(f'Epoch {epoch:3d} | '
+                  f'Train Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.2%} | '
+                  f'Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2%} | '
+                  f'LR: {optimizer.param_groups[0]["lr"]:.2e}')
+        
+        if avg_val_loss < best_val_loss - 1e-4:
+            best_val_loss = avg_val_loss
+            best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print(f'\n早停于 epoch {epoch}')
+                break
+    
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+    
+    history = {
+        'train_loss': train_losses, 
+        'val_loss': val_losses,
+        'train_acc': train_accs, 
+        'val_acc': val_accs,
+        'train_auc': train_aucs,
+        'val_auc': val_aucs,
+    }
+    return model, history
+
+
+# ==================== 评估函数 ====================
+
+def safe_auc(labels, probs):
+    """安全计算AUC"""
+    unique_labels = np.unique(labels)
+    if len(unique_labels) < 2:
+        return 1.0
+    try:
+        return roc_auc_score(labels, probs)
+    except ValueError:
+        return 1.0
+
+
+def evaluate_model(model, data_loader, device, class_names=['非大麻素', '大麻素']):
+    """谱图级别评估"""
+    model.eval()
+    all_probs, all_labels, all_preds = [], [], []
+    
+    with torch.no_grad():
+        for batch_spec, batch_labels in data_loader:
+            batch_spec = batch_spec.to(device)
+            logits = model(batch_spec)
+            probs = torch.sigmoid(logits)
+            
+            all_probs.extend(probs.cpu().numpy())
+            all_labels.extend(batch_labels.cpu().numpy())
+            all_preds.extend((probs >= 0.5).float().cpu().numpy())
+    
+    all_probs = np.array(all_probs)
+    all_labels = np.array(all_labels)
+    all_preds = np.array(all_preds)
+    
+    acc = accuracy_score(all_labels, all_preds)
+    prec = precision_score(all_labels, all_preds, zero_division=0)
+    rec = recall_score(all_labels, all_preds, zero_division=0)
+    f1 = f1_score(all_labels, all_preds, zero_division=0)
+    auc = safe_auc(all_labels, all_probs)
+    
+    return {
+        'accuracy': acc, 
+        'precision': prec, 
+        'recall': rec,
+        'f1': f1, 
+        'auc': auc, 
+        'confusion_matrix': confusion_matrix(all_labels, all_preds),
+        'probs': all_probs, 
+        'labels': all_labels, 
+        'preds': all_preds,
+        'n_samples': len(all_labels),
+        'n_neg': (all_labels==0).sum(),
+        'n_pos': (all_labels==1).sum(),
+    }
+
+
+def evaluate_positive_per_smiles(test_indices, smiles_all, labels_all, probs, preds):
+    """
+    仅对阳性样本按SMILES聚合评估
+    同一SMILES的多张谱图取均值概率
+    """
+    test_labels = labels_all[test_indices]
+    test_smiles = smiles_all[test_indices]
+    
+    pos_mask = test_labels == 1
+    
+    if pos_mask.sum() == 0:
+        print("\n  ⚠ 测试集中无阳性样本，跳过SMILES聚合评估")
+        return None
+    
+    pos_smiles = test_smiles[pos_mask]
+    pos_probs = probs[pos_mask]
+    pos_preds = preds[pos_mask]
+    pos_labels = test_labels[pos_mask]
+    
+    smiles_to_indices = defaultdict(list)
+    for i, smi in enumerate(pos_smiles):
+        smiles_to_indices[smi].append(i)
+    
+    smiles_probs = []
+    smiles_labels = []
+    smiles_preds = []
+    smiles_names = []
+    smiles_counts = []
+    
+    for smi, idx_list in smiles_to_indices.items():
+        mean_prob = np.mean(pos_probs[idx_list])
+        smiles_probs.append(mean_prob)
+        smiles_labels.append(pos_labels[idx_list[0]])
+        smiles_preds.append(1.0 if mean_prob >= 0.5 else 0.0)
+        smiles_names.append(smi)
+        smiles_counts.append(len(idx_list))
+    
+    smiles_probs = np.array(smiles_probs)
+    smiles_labels = np.array(smiles_labels)
+    smiles_preds = np.array(smiles_preds)
+    
+    n_correct = (smiles_preds == smiles_labels).sum()
+    n_total = len(smiles_labels)
+    acc = n_correct / n_total if n_total > 0 else 0
+    
+    print(f"\n{'='*60}")
+    print("阳性样本-按SMILES聚合评估（化合物级别）")
+    print(f"{'='*60}")
+    print(f"  阳性唯一SMILES数: {len(smiles_to_indices)}")
+    print(f"  正确识别: {n_correct}/{n_total} 种化合物 ({acc:.2%})")
+    print(f"  漏检:     {n_total - n_correct}/{n_total} 种化合物")
+    
+    return {
+        'accuracy': acc,
+        'n_smiles': len(smiles_to_indices),
+        'n_correct': n_correct,
+        'n_missed': n_total - n_correct,
+        'mean_prob': smiles_probs.mean(),
+        'smiles_names': smiles_names,
+        'smiles_probs': smiles_probs,
+        'smiles_labels': smiles_labels,
+        'smiles_preds': smiles_preds,
+        'smiles_counts': smiles_counts,
+    }
+
+
+# ==================== 导出Excel函数 ====================
+
+def export_results_to_excel(history, train_loader, val_loader, test_loader, 
+                            model, train_results, val_results, test_results,
+                            smiles_results, X, y, train_idx, val_idx, test_idx,
+                            compounds_pos, compounds_neg, output_dir):
+    """
+    将所有结果导出为Excel文件
+    包含：训练历史、汇总指标、各集预测结果、错误预测样本、ROC数据
+    """
+    
+    print("\n" + "="*60)
+    print("导出Excel结果")
+    print("="*60)
+    
+    device = next(model.parameters()).device
+    model.eval()
+    
+    # ===== 1. 训练历史 =====
+    max_len = max(len(history['train_loss']), len(history['val_loss']))
+    df_history = pd.DataFrame({
+        'Epoch': list(range(1, max_len + 1)),
+        'Train_Loss': history['train_loss'] + [np.nan] * (max_len - len(history['train_loss'])),
+        'Val_Loss': history['val_loss'] + [np.nan] * (max_len - len(history['val_loss'])),
+        'Train_Acc': history['train_acc'] + [np.nan] * (max_len - len(history['train_acc'])),
+        'Val_Acc': history['val_acc'] + [np.nan] * (max_len - len(history['val_acc'])),
+        'Train_AUC': history['train_auc'] + [np.nan] * (max_len - len(history['train_auc'])),
+        'Val_AUC': history['val_auc'] + [np.nan] * (max_len - len(history['val_auc'])),
+    })
+    
+    # ===== 2. 各集合汇总指标 =====
+    df_summary = pd.DataFrame({
+        'Dataset': ['Train', 'Validation', 'Test'],
+        'Samples': [train_results['n_samples'], val_results['n_samples'], test_results['n_samples']],
+        'Positive': [train_results['n_pos'], val_results['n_pos'], test_results['n_pos']],
+        'Negative': [train_results['n_neg'], val_results['n_neg'], test_results['n_neg']],
+        'Accuracy': [train_results['accuracy'], val_results['accuracy'], test_results['accuracy']],
+        'Precision': [train_results['precision'], val_results['precision'], test_results['precision']],
+        'Recall': [train_results['recall'], val_results['recall'], test_results['recall']],
+        'F1': [train_results['f1'], val_results['f1'], test_results['f1']],
+        'AUC': [train_results['auc'], val_results['auc'], test_results['auc']],
+        'TN': [train_results['confusion_matrix'][0,0], 
+               val_results['confusion_matrix'][0,0], 
+               test_results['confusion_matrix'][0,0]],
+        'FP': [train_results['confusion_matrix'][0,1], 
+               val_results['confusion_matrix'][0,1], 
+               test_results['confusion_matrix'][0,1]],
+        'FN': [train_results['confusion_matrix'][1,0], 
+               val_results['confusion_matrix'][1,0], 
+               test_results['confusion_matrix'][1,0]],
+        'TP': [train_results['confusion_matrix'][1,1], 
+               val_results['confusion_matrix'][1,1], 
+               test_results['confusion_matrix'][1,1]],
+    })
+    
+    # ===== 3. 获取样本名称 =====
+    sample_names = []
+    for i in range(len(X)):
+        if i < len(compounds_pos):
+            sample_names.append(compounds_pos[i]['name'])
+        else:
+            sample_names.append(compounds_neg[i - len(compounds_pos)]['name'])
+    sample_names = np.array(sample_names)
+    
+    # ===== 4. 训练集详细预测 =====
+    df_train = pd.DataFrame({
+        'Sample_Index': train_idx,
+        'Sample_Name': sample_names[train_idx],
+        'True_Label': train_results['labels'],
+        'Pred_Prob': train_results['probs'],
+        'Pred_Label': train_results['preds'],
+        'Correct': train_results['labels'] == train_results['preds'],
+    })
+    
+    # ===== 5. 验证集详细预测 =====
+    df_val = pd.DataFrame({
+        'Sample_Index': val_idx,
+        'Sample_Name': sample_names[val_idx],
+        'True_Label': val_results['labels'],
+        'Pred_Prob': val_results['probs'],
+        'Pred_Label': val_results['preds'],
+        'Correct': val_results['labels'] == val_results['preds'],
+    })
+    
+    # ===== 6. 测试集详细预测 =====
+    df_test = pd.DataFrame({
+        'Sample_Index': test_idx,
+        'Sample_Name': sample_names[test_idx],
+        'True_Label': test_results['labels'],
+        'Pred_Prob': test_results['probs'],
+        'Pred_Label': test_results['preds'],
+        'Correct': test_results['labels'] == test_results['preds'],
+    })
+    
+    # ===== 7. 错误预测样本 =====
+    train_errors = df_train[df_train['Correct'] == False].copy()
+    train_errors['Dataset'] = 'Train'
+    
+    val_errors = df_val[df_val['Correct'] == False].copy()
+    val_errors['Dataset'] = 'Validation'
+    
+    test_errors = df_test[df_test['Correct'] == False].copy()
+    test_errors['Dataset'] = 'Test'
+    
+    all_errors = pd.concat([train_errors, val_errors, test_errors], ignore_index=True)
+    
+    all_errors['Error_Type'] = all_errors.apply(
+        lambda row: 'False Positive (FP)' if row['True_Label'] == 0 and row['Pred_Label'] == 1
+        else 'False Negative (FN)', axis=1
+    )
+    
+    all_errors = all_errors[['Dataset', 'Sample_Index', 'Sample_Name', 'True_Label', 
+                              'Pred_Label', 'Pred_Prob', 'Error_Type']]
+    
+    # ===== 8. ROC曲线数据（三个数据集） =====
+    fpr_train, tpr_train, thresholds_train = roc_curve(train_results['labels'], train_results['probs'])
+    df_roc_train = pd.DataFrame({
+        'FPR': fpr_train,
+        'TPR': tpr_train,
+        'Threshold': np.append(thresholds_train, [np.nan]) if len(thresholds_train) < len(fpr_train) else thresholds_train
+    })
+    df_roc_train['Dataset'] = 'Train'
+    
+    fpr_val, tpr_val, thresholds_val = roc_curve(val_results['labels'], val_results['probs'])
+    df_roc_val = pd.DataFrame({
+        'FPR': fpr_val,
+        'TPR': tpr_val,
+        'Threshold': np.append(thresholds_val, [np.nan]) if len(thresholds_val) < len(fpr_val) else thresholds_val
+    })
+    df_roc_val['Dataset'] = 'Validation'
+    
+    fpr_test, tpr_test, thresholds_test = roc_curve(test_results['labels'], test_results['probs'])
+    df_roc_test = pd.DataFrame({
+        'FPR': fpr_test,
+        'TPR': tpr_test,
+        'Threshold': np.append(thresholds_test, [np.nan]) if len(thresholds_test) < len(fpr_test) else thresholds_test
+    })
+    df_roc_test['Dataset'] = 'Test'
+    
+    df_roc_all = pd.concat([df_roc_train, df_roc_val, df_roc_test], ignore_index=True)
+    
+    # ===== 9. 单独保存测试集ROC数据为单独的Excel =====
+    df_roc_test_only = pd.DataFrame({
+        'FPR': fpr_test,
+        'TPR': tpr_test,
+        'Threshold': np.append(thresholds_test, [np.nan]) if len(thresholds_test) < len(fpr_test) else thresholds_test
+    })
+    
+    roc_test_excel_path = output_dir / f'test_roc_curve_data_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+    with pd.ExcelWriter(roc_test_excel_path, engine='openpyxl') as writer:
+        df_roc_test_only.to_excel(writer, sheet_name='Test_ROC_Data', index=False)
+        # 添加说明
+        note_df = pd.DataFrame({
+            'Info': [
+                f'Test Set AUC: {test_results["auc"]:.4f}',
+                f'Test Set Samples: {test_results["n_samples"]}',
+                f'Test Set Positive: {test_results["n_pos"]}',
+                f'Test Set Negative: {test_results["n_neg"]}',
+                f'Generated at: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
+            ]
+        })
+        note_df.to_excel(writer, sheet_name='Info', index=False)
+    
+    print(f"\n  ✓ 测试集ROC数据已单独保存: {roc_test_excel_path}")
+    
+    # ===== 10. 阳性SMILES聚合结果 =====
+    if smiles_results is not None:
+        df_smiles = pd.DataFrame({
+            'SMILES': smiles_results['smiles_names'],
+            'Spectra_Count': smiles_results['smiles_counts'],
+            'True_Label': smiles_results['smiles_labels'],
+            'Mean_Prob': smiles_results['smiles_probs'],
+            'Pred_Label': smiles_results['smiles_preds'],
+            'Correct': smiles_results['smiles_labels'] == smiles_results['smiles_preds'],
+        })
+    else:
+        df_smiles = pd.DataFrame({'Note': ['No positive samples in test set']})
+    
+    # ===== 11. 保存主Excel =====
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    excel_path = output_dir / f'classification_results_{timestamp}.xlsx'
+    
+    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        df_history.to_excel(writer, sheet_name='Training_History', index=False)
+        df_summary.to_excel(writer, sheet_name='Summary_Metrics', index=False)
+        df_train.to_excel(writer, sheet_name='Train_Predictions', index=False)
+        df_val.to_excel(writer, sheet_name='Val_Predictions', index=False)
+        df_test.to_excel(writer, sheet_name='Test_Predictions', index=False)
+        all_errors.to_excel(writer, sheet_name='Error_Predictions', index=False)
+        df_roc_all.to_excel(writer, sheet_name='ROC_Curve_Data', index=False)
+        df_smiles.to_excel(writer, sheet_name='SMILES_Level_Results', index=False)
+    
+    print(f"\n  ✓ 主Excel结果已保存: {excel_path}")
+    print(f"    包含以下工作表:")
+    print(f"      - Training_History: 每个epoch的训练历史")
+    print(f"      - Summary_Metrics: 各集合汇总指标")
+    print(f"      - Train_Predictions: 训练集详细预测")
+    print(f"      - Val_Predictions: 验证集详细预测")
+    print(f"      - Test_Predictions: 测试集详细预测")
+    print(f"      - Error_Predictions: ★ 所有错误预测样本 ★")
+    print(f"      - ROC_Curve_Data: 三个数据集的ROC曲线数据")
+    print(f"      - SMILES_Level_Results: 阳性SMILES聚合评估")
+    
+    # 打印错误预测汇总
+    print(f"\n  ★ 错误预测汇总:")
+    print(f"    训练集错误: {len(train_errors)} / {len(df_train)} ({len(train_errors)/len(df_train)*100:.2f}%)")
+    print(f"    验证集错误: {len(val_errors)} / {len(df_val)} ({len(val_errors)/len(df_val)*100:.2f}%)")
+    print(f"    测试集错误: {len(test_errors)} / {len(df_test)} ({len(test_errors)/len(df_test)*100:.2f}%)")
+    print(f"    总错误数: {len(all_errors)}")
+    
+    if len(all_errors) > 0 and len(all_errors) <= 30:
+        print(f"\n    错误样本列表:")
+        for _, row in all_errors.iterrows():
+            print(f"      [{row['Dataset']}] {row['Sample_Name'][:50]}... "
+                  f"True={int(row['True_Label'])} Pred={int(row['Pred_Label'])} "
+                  f"Prob={row['Pred_Prob']:.4f} ({row['Error_Type']})")
+    
+    return excel_path, roc_test_excel_path
+
+
+# ==================== 可视化 ====================
+
+def plot_comprehensive_results(history, train_results, val_results, test_results, 
+                                smiles_results, output_dir):
+    """
+    绘制全面的评估图表
+    """
+    fig = plt.figure(figsize=(20, 12))
+    
+    # 1. Loss 曲线
+    ax1 = plt.subplot(2, 3, 1)
+    ax1.plot(history['train_loss'], label='Train Loss', linewidth=2, color='blue')
+    ax1.plot(history['val_loss'], label='Val Loss', linewidth=2, color='orange')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.set_title('Training & Validation Loss')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # 2. Acc 曲线
+    ax2 = plt.subplot(2, 3, 2)
+    ax2.plot(history['train_acc'], label='Train Acc', linewidth=2, color='blue')
+    ax2.plot(history['val_acc'], label='Val Acc', linewidth=2, color='orange')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Accuracy')
+    ax2.set_title('Training & Validation Accuracy')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    
+    # 3. 综合指标柱状图
+    ax3 = plt.subplot(2, 3, 3)
+    metrics = ['Accuracy', 'Precision', 'Recall', 'F1', 'AUC']
+    train_metrics = [train_results['accuracy'], train_results['precision'], 
+                     train_results['recall'], train_results['f1'], train_results['auc']]
+    val_metrics = [val_results['accuracy'], val_results['precision'], 
+                   val_results['recall'], val_results['f1'], val_results['auc']]
+    test_metrics = [test_results['accuracy'], test_results['precision'], 
+                    test_results['recall'], test_results['f1'], test_results['auc']]
+    
+    x = np.arange(len(metrics))
+    width = 0.25
+    ax3.bar(x - width, train_metrics, width, label='Train', color='blue', alpha=0.7)
+    ax3.bar(x, val_metrics, width, label='Val', color='orange', alpha=0.7)
+    ax3.bar(x + width, test_metrics, width, label='Test', color='green', alpha=0.7)
+    ax3.set_xlabel('Metrics')
+    ax3.set_ylabel('Score')
+    ax3.set_title('Performance Comparison')
+    ax3.set_xticks(x)
+    ax3.set_xticklabels(metrics, rotation=45, ha='right')
+    ax3.legend()
+    ax3.set_ylim(0, 1.1)
+    ax3.axhline(y=0.5, color='red', linestyle='--', alpha=0.3)
+    ax3.grid(True, alpha=0.3, axis='y')
+    
+    # 4. 训练集 ROC
+    ax4 = plt.subplot(2, 3, 4)
+    fpr_train, tpr_train, _ = roc_curve(train_results['labels'], train_results['probs'])
+    ax4.plot(fpr_train, tpr_train, linewidth=2, color='blue', 
+             label=f'Train AUC = {train_results["auc"]:.4f}')
+    ax4.plot([0, 1], [0, 1], 'k--', alpha=0.3, label='Random')
+    ax4.set_xlabel('False Positive Rate')
+    ax4.set_ylabel('True Positive Rate')
+    ax4.set_title(f'ROC Curve - Train Set\n(n={train_results["n_samples"]})')
+    ax4.legend(loc='lower right')
+    ax4.grid(True, alpha=0.3)
+    
+    # 5. 验证集 ROC
+    ax5 = plt.subplot(2, 3, 5)
+    fpr_val, tpr_val, _ = roc_curve(val_results['labels'], val_results['probs'])
+    ax5.plot(fpr_val, tpr_val, linewidth=2, color='orange', 
+             label=f'Val AUC = {val_results["auc"]:.4f}')
+    ax5.plot([0, 1], [0, 1], 'k--', alpha=0.3, label='Random')
+    ax5.set_xlabel('False Positive Rate')
+    ax5.set_ylabel('True Positive Rate')
+    ax5.set_title(f'ROC Curve - Validation Set\n(n={val_results["n_samples"]})')
+    ax5.legend(loc='lower right')
+    ax5.grid(True, alpha=0.3)
+    
+    # 6. 测试集 ROC
+    ax6 = plt.subplot(2, 3, 6)
+    fpr_test, tpr_test, _ = roc_curve(test_results['labels'], test_results['probs'])
+    ax6.plot(fpr_test, tpr_test, linewidth=2, color='green', 
+             label=f'Test AUC = {test_results["auc"]:.4f}')
+    ax6.plot([0, 1], [0, 1], 'k--', alpha=0.3, label='Random')
+    ax6.set_xlabel('False Positive Rate')
+    ax6.set_ylabel('True Positive Rate')
+    ax6.set_title(f'ROC Curve - Test Set\n(n={test_results["n_samples"]})')
+    ax6.legend(loc='lower right')
+    ax6.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    fig_path = output_dir / 'comprehensive_results.png'
+    plt.savefig(str(fig_path), dpi=300, bbox_inches='tight')
+    print(f"\n  ✓ 综合结果图已保存: {fig_path}")
+    
+    # ROC对比图
+    fig_roc, ax_roc = plt.subplots(figsize=(10, 8))
+    ax_roc.plot(fpr_train, tpr_train, linewidth=2, color='blue', 
+                label=f'Train AUC = {train_results["auc"]:.4f}')
+    ax_roc.plot(fpr_val, tpr_val, linewidth=2, color='orange', 
+                label=f'Val AUC = {val_results["auc"]:.4f}')
+    ax_roc.plot(fpr_test, tpr_test, linewidth=2, color='green', 
+                label=f'Test AUC = {test_results["auc"]:.4f}')
+    ax_roc.plot([0, 1], [0, 1], 'k--', alpha=0.3, label='Random')
+    ax_roc.set_xlabel('False Positive Rate')
+    ax_roc.set_ylabel('True Positive Rate')
+    ax_roc.set_title('ROC Curves Comparison (Train vs Val vs Test)')
+    ax_roc.legend(loc='lower right')
+    ax_roc.grid(True, alpha=0.3)
+    
+    roc_compare_path = output_dir / 'roc_curves_comparison.png'
+    plt.savefig(str(roc_compare_path), dpi=300, bbox_inches='tight')
+    print(f"  ✓ ROC对比图已保存: {roc_compare_path}")
+    plt.close('all')
+    
+    return fig_path, roc_compare_path
+
+
+# ==================== 主程序 ====================
+
+if __name__ == "__main__":
+    base_dir = Path(r"D:\DL\cann\建模")
+    positive_msp = base_dir / "阳性-含CanonicalSMILES-5类骨架.msp"
+    negative_msp = base_dir / "阴性.msp"
+    
+    # ★★★ 使用 best_model_0714.pt 作为预训练模型 ★★★
+    encoder_path = base_dir / "best_model_0716.pt"
+    
+    # 检查文件是否存在
+    if not encoder_path.exists():
+        print(f"❌ 错误: 未找到预训练模型文件: {encoder_path}")
+        print("   请确认文件路径是否正确，或使用以下备选路径:")
+        # 备选路径
+        alt_paths = [
+            base_dir / "pretrained_model_v2" / "pretrained_encoder_final.pt",
+            base_dir / "pretrained_model" / "pretrained_encoder_final.pt",
+            base_dir / "binary_classification_final" / "binary_classifier_latest.pt",
+        ]
+        for alt in alt_paths:
+            if alt.exists():
+                print(f"   ✓ 找到备选模型: {alt}")
+                encoder_path = alt
+                break
+        else:
+            raise FileNotFoundError(f"未找到任何可用的预训练模型文件，请检查路径: {base_dir}")
+    
+    # 输出目录
+    output_dir = base_dir / "binary_classification_with_best_model"
+    output_dir.mkdir(exist_ok=True)
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"设备: {device}")
+    print(f"预训练模型: {encoder_path}")
+    
+    # ===== 1. 加载数据 =====
+    print("\n" + "="*60)
+    print("1. 加载数据")
+    print("="*60)
+    
+    pos_compounds = parse_msp_with_smiles(str(positive_msp))
+    neg_compounds = parse_msp_with_smiles(str(negative_msp))
+    
+    # ★★★ 关键修改：将 .alpha.-pbp 从阳性改为阴性 ★★★
+    print("\n  ★ 正在将 '.alpha.-pbp' 化合物从阳性改为阴性...")
+    
+    # 记录要移除的阳性化合物索引
+    alpha_pbp_indices = []
+    for i, comp in enumerate(pos_compounds):
+        if comp['name'] == '.alpha.-pbp':
+            alpha_pbp_indices.append(i)
+            print(f"    找到: {comp['name']}, SMILES: {comp['smiles']}")
+    
+    if alpha_pbp_indices:
+        # 从阳性列表中移除
+        removed_comps = [pos_compounds[i] for i in alpha_pbp_indices]
+        pos_compounds = [comp for i, comp in enumerate(pos_compounds) if i not in alpha_pbp_indices]
+        # 添加到阴性列表
+        neg_compounds.extend(removed_comps)
+        print(f"  ✓ 已将 {len(removed_comps)} 个 '.alpha.-pbp' 样本移至阴性集")
+    else:
+        print("  ⚠ 未找到 '.alpha.-pbp' 化合物")
+    
+    # 重新构建阳性数据
+    pos_spectra = np.array([peaks_to_vector(c['peaks']) for c in pos_compounds])
+    pos_smiles = np.array([c['smiles'] if c['smiles'] else c['name'] for c in pos_compounds])
+    
+    # 重新构建阴性数据（包含原来的阴性 + .alpha.-pbp）
+    neg_spectra = np.array([peaks_to_vector(c['peaks']) for c in neg_compounds])
+    
+    X_pos = preprocess_spectra(pos_spectra)
+    X_neg = preprocess_spectra(neg_spectra)
+    
+    print(f"\n  阳性样本: {len(pos_spectra)} 谱图, {len(np.unique(pos_smiles))} 种化合物")
+    print(f"  阴性样本: {len(neg_spectra)} 谱图")
+    
+    pos_smiles_counts = Counter(pos_smiles)
+    count_dist = Counter(pos_smiles_counts.values())
+    print(f"  阳性-每种化合物的谱图数分布:")
+    for k in sorted(count_dist.keys()):
+        print(f"    {k}张: {count_dist[k]} 种")
+    
+    # ===== 2. 划分数据集 =====
+    print("\n" + "="*60)
+    print("2. 划分数据集（阳性按SMILES，阴性随机）")
+    print("="*60)
+    
+    pos_indices = np.arange(len(pos_spectra))
+    neg_indices = np.arange(len(pos_spectra), len(pos_spectra) + len(neg_spectra))
+    
+    train_idx, val_idx, test_idx = split_positive_by_smiles_negative_random(
+        pos_indices, neg_indices,
+        pos_smiles,
+        test_size=0.15, val_size=0.15,
+        random_state=42
+    )
+    
+    # 合并数据和标签
+    X = np.concatenate([X_pos, X_neg], axis=0)
+    y = np.concatenate([np.ones(len(X_pos)), np.zeros(len(X_neg))])
+    smiles_all = np.concatenate([pos_smiles, np.array(['neg_'+str(i) for i in range(len(X_neg))])])
+    
+    print(f"\n  总划分:")
+    print(f"    训练集: {len(train_idx)} 谱图 (阳性: {(y[train_idx]==1).sum():.0f}, 阴性: {(y[train_idx]==0).sum():.0f})")
+    print(f"    验证集: {len(val_idx)} 谱图 (阳性: {(y[val_idx]==1).sum():.0f}, 阴性: {(y[val_idx]==0).sum():.0f})")
+    print(f"    测试集: {len(test_idx)} 谱图 (阳性: {(y[test_idx]==1).sum():.0f}, 阴性: {(y[test_idx]==0).sum():.0f})")
+    
+    # ===== 3. 创建DataLoader =====
+    batch_size = 128
+    
+    train_dataset = TensorDataset(
+        torch.tensor(X[train_idx], dtype=torch.float32),
+        torch.tensor(y[train_idx], dtype=torch.float32)
+    )
+    val_dataset = TensorDataset(
+        torch.tensor(X[val_idx], dtype=torch.float32),
+        torch.tensor(y[val_idx], dtype=torch.float32)
+    )
+    test_dataset = TensorDataset(
+        torch.tensor(X[test_idx], dtype=torch.float32),
+        torch.tensor(y[test_idx], dtype=torch.float32)
+    )
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    
+    # ===== 4. 加载预训练编码器（使用 strict=False） =====
+    print("\n" + "="*60)
+    print("3. 加载预训练编码器")
+    print("="*60)
+    
+    encoder = SpectrumEncoder(input_dim=561, hidden_dim=256).to(device)
+    
+    # 加载模型
+    checkpoint = torch.load(str(encoder_path), map_location=device)
+    
+    # 提取 state_dict
+    if isinstance(checkpoint, dict):
+        if 'encoder_state_dict' in checkpoint:
+            state_dict = checkpoint['encoder_state_dict']
+            print("  从 checkpoint 加载 encoder_state_dict")
+        elif 'state_dict' in checkpoint:
+            state_dict = checkpoint['state_dict']
+            print("  从 checkpoint 加载 state_dict")
+        elif 'model_state_dict' in checkpoint:
+            state_dict = checkpoint['model_state_dict']
+            print("  从 checkpoint 加载 model_state_dict")
+        elif 'encoder' in checkpoint:
+            state_dict = checkpoint['encoder']
+            print("  从 checkpoint 加载 encoder")
+        else:
+            state_dict = checkpoint
+            print("  从 checkpoint 加载完整 state_dict")
+    else:
+        state_dict = checkpoint
+        print("  直接加载 state_dict")
+    
+    # 移除可能的前缀
+    if any(k.startswith('module.') for k in state_dict.keys()):
+        state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+        print("  已移除 'module.' 前缀")
+    if any(k.startswith('encoder.') for k in state_dict.keys()):
+        state_dict = {k.replace('encoder.', ''): v for k, v in state_dict.items()}
+        print("  已移除 'encoder.' 前缀")
+    
+    # 使用 strict=False 加载（只加载匹配的键，忽略不匹配的）
+    missing_keys, unexpected_keys = encoder.load_state_dict(state_dict, strict=False)
+    
+    print(f"  ✓ 已加载: {encoder_path}")
+    if missing_keys:
+        print(f"    ⚠ 缺失的键（保留预训练值）: {missing_keys}")
+    if unexpected_keys:
+        print(f"    ⚠ 多余的键（已忽略）: {unexpected_keys[:3]}..." if len(unexpected_keys) > 3 else f"    ⚠ 多余的键（已忽略）: {unexpected_keys}")
+    print(f"  ✓ 编码器加载完成（strict=False）")
+    
+    # ===== 5. 训练 =====
+    print("\n" + "="*60)
+    print("4. 训练二分类器")
+    print("="*60)
+    
+    model = BinaryClassifier(encoder, input_dim=256, freeze_encoder=True).to(device)
+    print(f"  可训练参数: {sum(p.numel() for p in model.parameters() if p.requires_grad):,}")
+    
+    model, history = train_binary_classifier(
+        model, train_loader, val_loader, device,
+        epochs=100, lr=0.001, patience=15
+    )
+    
+    # ===== 6. 评估 =====
+    print("\n" + "="*60)
+    print("5. 评估训练集、验证集、测试集")
+    print("="*60)
+    
+    train_loader_eval = DataLoader(train_dataset, batch_size=256, shuffle=False)
+    val_loader_eval = DataLoader(val_dataset, batch_size=256, shuffle=False)
+    test_loader_eval = DataLoader(test_dataset, batch_size=256, shuffle=False)
+    
+    train_results = evaluate_model(model, train_loader_eval, device)
+    val_results = evaluate_model(model, val_loader_eval, device)
+    test_results = evaluate_model(model, test_loader_eval, device)
+    
+    print(f"\n  训练集: Acc={train_results['accuracy']:.2%}, AUC={train_results['auc']:.4f}")
+    print(f"  验证集: Acc={val_results['accuracy']:.2%}, AUC={val_results['auc']:.4f}")
+    print(f"  测试集: Acc={test_results['accuracy']:.2%}, AUC={test_results['auc']:.4f}")
+    
+    # ===== 7. 阳性SMILES聚合评估 =====
+    smiles_results = evaluate_positive_per_smiles(
+        test_idx, smiles_all, y, test_results['probs'], test_results['preds']
+    )
+    
+    # ===== 8. 导出Excel =====
+    export_results_to_excel(
+        history, train_loader, val_loader, test_loader,
+        model, train_results, val_results, test_results,
+        smiles_results, X, y, train_idx, val_idx, test_idx,
+        pos_compounds, neg_compounds, output_dir
+    )
+    
+    # ===== 9. 综合可视化 =====
+    print("\n" + "="*60)
+    print("6. 生成综合可视化图表")
+    print("="*60)
+    
+    plot_comprehensive_results(
+        history, train_results, val_results, test_results, 
+        smiles_results, output_dir
+    )
+    
+    # ===== 10. 保存模型（使用当前时间命名） =====
+    print("\n" + "="*60)
+    print("7. 保存模型")
+    print("="*60)
+    
+    # 获取当前时间戳
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # 保存完整模型
+    model_path = output_dir / f'binary_classifier_{timestamp}.pt'
+    torch.save({
+        'encoder_state_dict': encoder.state_dict(),
+        'classifier_state_dict': model.classifier.state_dict(),
+        'history': history,
+        'train_results': train_results,
+        'val_results': val_results,
+        'test_results': test_results,
+        'timestamp': timestamp,
+    }, str(model_path))
+    print(f"  ✓ 完整模型已保存: {model_path}")
+    
+    # 同时保存一份仅包含模型权重的轻量版本
+    model_weights_path = output_dir / f'binary_classifier_weights_{timestamp}.pt'
+    torch.save({
+        'encoder_state_dict': encoder.state_dict(),
+        'classifier_state_dict': model.classifier.state_dict(),
+    }, str(model_weights_path))
+    print(f"  ✓ 模型权重已保存: {model_weights_path}")
+    
+    # 更新或创建最新模型链接（保留最近一次训练的模型）
+    latest_path = output_dir / 'binary_classifier_latest.pt'
+    torch.save({
+        'encoder_state_dict': encoder.state_dict(),
+        'classifier_state_dict': model.classifier.state_dict(),
+        'history': history,
+        'train_results': train_results,
+        'val_results': val_results,
+        'test_results': test_results,
+        'timestamp': timestamp,
+    }, str(latest_path))
+    print(f"  ✓ 最新模型已保存: {latest_path}")
+    
+    # ===== 11. 保存训练摘要 =====
+    summary_path = output_dir / f'training_summary_{timestamp}.txt'
+    with open(summary_path, 'w', encoding='utf-8') as f:
+        f.write("="*60 + "\n")
+        f.write("二分类训练摘要\n")
+        f.write("="*60 + "\n\n")
+        f.write(f"训练时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"设备: {device}\n")
+        f.write(f"预训练模型: {encoder_path}\n\n")
+        
+        f.write("数据集划分:\n")
+        f.write(f"  训练集: {len(train_idx)} 谱图 (阳性: {(y[train_idx]==1).sum():.0f}, 阴性: {(y[train_idx]==0).sum():.0f})\n")
+        f.write(f"  验证集: {len(val_idx)} 谱图 (阳性: {(y[val_idx]==1).sum():.0f}, 阴性: {(y[val_idx]==0).sum():.0f})\n")
+        f.write(f"  测试集: {len(test_idx)} 谱图 (阳性: {(y[test_idx]==1).sum():.0f}, 阴性: {(y[test_idx]==0).sum():.0f})\n\n")
+        
+        f.write("性能指标:\n")
+        f.write(f"  训练集 - Acc: {train_results['accuracy']:.2%}, AUC: {train_results['auc']:.4f}\n")
+        f.write(f"  验证集 - Acc: {val_results['accuracy']:.2%}, AUC: {val_results['auc']:.4f}\n")
+        f.write(f"  测试集 - Acc: {test_results['accuracy']:.2%}, AUC: {test_results['auc']:.4f}\n\n")
+        
+        f.write("混淆矩阵 (测试集):\n")
+        cm = test_results['confusion_matrix']
+        f.write(f"  TN: {cm[0,0]}, FP: {cm[0,1]}\n")
+        f.write(f"  FN: {cm[1,0]}, TP: {cm[1,1]}\n\n")
+        
+        f.write(f"最佳Epoch: {len(history['train_loss'])}\n")
+        f.write(f"最佳验证损失: {min(history['val_loss']):.4f}\n")
+        
+        if smiles_results is not None:
+            f.write(f"\n阳性SMILES聚合评估 (测试集):\n")
+            f.write(f"  唯一SMILES数: {smiles_results['n_smiles']}\n")
+            f.write(f"  化合物级准确率: {smiles_results['accuracy']:.2%}\n")
+            f.write(f"  正确识别: {smiles_results['n_correct']}/{smiles_results['n_smiles']}\n")
+    
+    print(f"  ✓ 训练摘要已保存: {summary_path}")
+    
+    print(f"\n{'='*60}")
+    print("完成！")
+    print(f"{'='*60}")
+    print(f"  预训练模型: {encoder_path}")
+    print(f"  输出目录: {output_dir}")
+    print(f"  模型: {model_path}")
+    print(f"  综合结果图: {output_dir / 'comprehensive_results.png'}")
+    print(f"  ROC对比图: {output_dir / 'roc_curves_comparison.png'}")
+    print(f"  训练摘要: {summary_path}")
+
