@@ -60,3 +60,4 @@ data_preprocessed/
 *.xlsx
 
 app/cache/positive_idx/
+simclr_finetune/scratch/
