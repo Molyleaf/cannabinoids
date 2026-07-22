@@ -130,6 +130,42 @@ def preprocess_spectra(vecs: np.ndarray) -> np.ndarray:
     return vecs
 
 
+def format_msp_content(content_str: str) -> str:
+    """
+    处理可能带有分号的单行多质谱峰格式（例如：37 4; 38 6;），
+    将其格式化为标准的单行单峰格式（例如：37 4\n38 6\n）。
+    """
+    lines = content_str.splitlines()
+    formatted_lines = []
+    
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            formatted_lines.append("")
+            continue
+            
+        # 判断是否为元数据行
+        is_metadata = False
+        if ":" in stripped:
+            first_char = stripped[0]
+            if not first_char.isdigit():
+                is_metadata = True
+                
+        if is_metadata:
+            formatted_lines.append(stripped)
+        else:
+            # 解析并提取质谱峰，按行写入
+            parts = stripped.split(";")
+            for part in parts:
+                p_str = part.strip()
+                if p_str:
+                    tokens = p_str.split()
+                    if len(tokens) >= 2:
+                        formatted_lines.append(f"{tokens[0]} {tokens[1]}")
+                        
+    return "\n".join(formatted_lines)
+
+
 def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75) -> dict:
     """
     测样管线核心执行函数：
@@ -141,6 +177,17 @@ def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75)
     if ext not in ['msp', 'mgf']:
         # 默认尝试解析为 msp
         ext = 'msp'
+
+    # 如果是 msp 文件，先进行格式标准化清洗以支持单行多 peaks 结构
+    if ext == 'msp':
+        try:
+            # 兼容多种编码尝试解码
+            content_str = file_bytes.decode('utf-8', errors='ignore')
+            formatted_str = format_msp_content(content_str)
+            file_bytes = formatted_str.encode('utf-8')
+        except Exception as e:
+            # 容错：如果解码失败，使用原数据
+            print(f"Warning: msp formatting failed, using raw bytes. Error: {str(e)}")
 
     # 步骤 1: 导入并清洗质谱数据
     tmp_file = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False)
