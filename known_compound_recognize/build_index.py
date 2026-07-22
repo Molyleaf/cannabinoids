@@ -5,7 +5,7 @@ from ms_entropy import read_one_spectrum, clean_spectrum, FlashEntropySearch
 def build_positive_index():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     msp_file = os.path.join(current_dir, "positive.msp")
-    index_dir = os.path.join(current_dir, "positive_idx")
+    index_dir = os.path.join(current_dir, "../app/cache/positive_idx")
 
     if not os.path.exists(msp_file):
         raise FileNotFoundError(f"Could not find positive.msp at {msp_file}")

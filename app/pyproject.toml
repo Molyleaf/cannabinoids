@@ -1,0 +1,16 @@
+[project]
+name = "cannabinoids-app"
+version = "0.1.0"
+description = "Cannabinoids Mass Spectrum Analysis Pipeline & Server"
+requires-python = ">=3.11"
+dependencies = [
+    "torch",
+    "numpy",
+    "matplotlib",
+    "ms-entropy>=1.5.2",
+    "safetensors",
+    "fastapi",
+    "uvicorn",
+    "streamlit",
+    "python-multipart",
+]

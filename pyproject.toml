@@ -9,6 +9,12 @@ dependencies = [
     "tqdm",
     "ipykernel",
     "ms-entropy>=1.5.2",
+    "safetensors",
+    "fastapi",
+    "uvicorn",
+    "streamlit",
+    "python-multipart",
+    "httpx",
 ]
 
 [dependency-groups]

@@ -16,7 +16,7 @@ def get_entropy_search():
         
         # Load index files from the same directory as this script
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        index_dir = os.path.join(current_dir, "positive_idx")
+        index_dir = os.path.join(current_dir, "cache/positive_idx")
         if not os.path.exists(index_dir):
             raise FileNotFoundError(
                 f"Index directory not found at {index_dir}. "
