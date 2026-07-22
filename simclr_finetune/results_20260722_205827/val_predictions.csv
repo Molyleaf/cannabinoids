@@ -1,0 +1,496 @@
+Sample_Index,Sample_Name,True_Label,Pred_Prob,Pred_Label,Correct
+226,08-04,1.0,0.9576383,1.0,True
+2718,7-keto Dehydroepiandrosterone Acetate,0.0,0.035489514,0.0,True
+1147,jwh-311,1.0,0.24557589,0.0,False
+707,adb-4en-pinaca,1.0,0.957376,1.0,True
+819,jwh-019-n-6-hydroxyhexyl-metabolite,1.0,0.95829886,1.0,True
+765,5-fluoro-CYPPICA,1.0,0.041954942,0.0,False
+3091,Norpropoxyphene,0.0,0.03646013,0.0,True
+3429,t-BOC-4-Anilinopiperidine,0.0,0.036023498,0.0,True
+1239,jwh-018-n-5-chloropentyl-analog,1.0,0.9582176,1.0,True
+1900,"METHYL 2-(4,6-DIPHENYL-2-PYRIMIDINYLAMINO)BENZOATE",0.0,0.0356052,0.0,True
+1886,"(TERT-BUTYL)(2-(3,5-DITRIMETHYLSILYLOXYPHENYL)-2-TRIMETHYLSILYLOXYETHYL)AMINE",0.0,0.036549967,0.0,True
+1276,5-fluoro-abica,1.0,0.9506735,1.0,True
+1305,lti-701,1.0,0.9573582,1.0,True
+1005,cumyl-inaca,1.0,0.9567069,1.0,True
+1055,adb-5-primebr-butinaca-n-3-hydroxybutyl-metabolite,1.0,0.9581696,1.0,True
+1296,5-fluoro-adb-pinaca,1.0,0.95805335,1.0,True
+109,jwh-210,1.0,0.9580866,1.0,True
+1921,"(2E,6E,10E)-1-(2-OXA-3-OXO-4,7,7-TRIMETHYL-BICYCLO(2,2,1)HEPTANECARBONYLOXY)-14-ISOPROPENYL-3,7,11-TRIMETHYLCYCLOTETRADECATRIENE",0.0,0.034215964,0.0,True
+2145,"1-TETRADECYL-2,3-DI-O-ACETHYL GLYCEROL",0.0,0.03496171,0.0,True
+905,5-fluoro-pb-22-4-hydroxyisoquinoline-isomer,1.0,0.8598947,1.0,True
+1186,jwh-019-n-6-hydroxyhexyl-metabolite,1.0,0.9583132,1.0,True
+3166,3-Methyl Nimetazepam,0.0,0.03779531,0.0,True
+2230,Dextromoramide,0.0,0.046614394,0.0,True
+1767,METHYL DOCOSANOATE,0.0,0.035632882,0.0,True
+3143,GTS-21,0.0,0.03530859,0.0,True
+2131,LANOSTEROL-TRIMETHYLSILYL-ETHER,0.0,0.03663669,0.0,True
+292,14-10,1.0,0.95333,1.0,True
+2235,Isotodesnitazene,0.0,0.06937924,0.0,True
+2981,para-methoxy Tetrahydrofuran fentanyl,0.0,0.03901864,0.0,True
+2812,N-(2C-E) Fentanyl,0.0,0.03613692,0.0,True
+2953,Mitragynine-d3,0.0,0.036250822,0.0,True
+1435,25-05,0.0,0.036407024,0.0,True
+2553,3-CAF,0.0,0.0358444,0.0,True
+2035,"TRIBUTYL 2-CARBOXYMETHYL-1,2,3-PROPANE TRICARBOXYLATE",0.0,0.036529925,0.0,True
+3304,Methanandamide,0.0,0.035479713,0.0,True
+2819,Pivoxazepam-TMS,0.0,0.037417762,0.0,True
+1976,ANILERIDINE,0.0,0.036753196,0.0,True
+677,5-fluoro-mdmb-pica-metabolite-4,1.0,0.95777136,1.0,True
+2023,DI(2-ETHYL HEXYL) ADIPATE,0.0,0.035690047,0.0,True
+1003,mdmb-pinaca,1.0,0.9579317,1.0,True
+2566,para-methyl Isobutyryl fentanyl,0.0,0.03806745,0.0,True
+1404,Cannabidiol diacetate,0.0,0.038974006,0.0,True
+841,jwh-073-6-methoxyindole-analog,1.0,0.9582154,1.0,True
+3058,Chlordiazepoxide,0.0,0.03499346,0.0,True
+1183,jwh-018-n-4-hydroxypentyl-metabolite,1.0,0.9582054,1.0,True
+2583,para-chloro Cyclopropyl fentanyl,0.0,0.03557947,0.0,True
+1204,jwh-073-6-methoxyindole-analog,1.0,0.95820725,1.0,True
+2763,Lofentanil,0.0,0.03736473,0.0,True
+2360,Griseofulvin-d3 (Not Certified by NIST),0.0,0.03525264,0.0,True
+2400,Trazodone-d6 (HCl),0.0,0.03511508,0.0,True
+2288,Fentanyl propyl analog,0.0,0.034806713,0.0,True
+250,10-08,1.0,0.9573284,1.0,True
+2980,JZL 195,0.0,0.03510722,0.0,True
+236,09-04,1.0,0.9579436,1.0,True
+3161,exo-THCV methyl ether,0.0,0.035587244,0.0,True
+993,cho-4me-5-primebr-fuboxpyra,1.0,0.9579069,1.0,True
+1124,jwh-182,1.0,0.95826524,1.0,True
+882,adb-pinaca-isomer-3,1.0,0.95418763,1.0,True
+1265,5-fluoro-pb-22-5-hydroxyisoquinoline-isomer,1.0,0.86960024,1.0,True
+2805,25C-NBOH-2TMS,0.0,0.035358325,0.0,True
+2381,Morphine mono-TMS derivative,0.0,0.035573334,0.0,True
+1564,"1-PHENYL-1-(PENTAMETHYLCYCLOPENTA-2,4-DIENYL)DIBENZOSILACYCLOPENTADIENE",0.0,0.036443945,0.0,True
+1206,5-chloro-ur-144-rearrangement-product,1.0,0.95796597,1.0,True
+1835,5-ACETOXY-1-(4-ACETOXY-3-METHOXYPHENYL)DECAN-3-ONE,0.0,0.03648596,0.0,True
+2872,N-Pyrrolidino Isotonitazene,0.0,0.03701703,0.0,True
+690,mdmb-4en-pica-butanoic-acid-metabolite,1.0,0.95798904,1.0,True
+3062,4-methoxy PV8,0.0,0.035888787,0.0,True
+290,14-08,1.0,0.9557281,1.0,True
+867,xlr12,1.0,0.9551405,1.0,True
+2431,para-Methylfentanyl-d5,0.0,0.036154386,0.0,True
+3148,Lorazepam,0.0,0.045633465,0.0,True
+2316,Atabrine,0.0,0.04163429,0.0,True
+1655,"2,2',3,3',4,4',6,6'-OCTA-ORTHO-[D3]METHYL-TREHALOSE-D24",0.0,0.03595538,0.0,True
+378,24-06,1.0,0.957956,1.0,True
+2409,2-Furanyl fentanyl,0.0,0.035972185,0.0,True
+2597,meta-fluoro Acrylfentanyl,0.0,0.036075227,0.0,True
+742,jwh-081-2-methoxynaphthyl-isomer,1.0,0.95839244,1.0,True
+1415,01-05,0.0,0.03593585,0.0,True
+729,"jwh-073-n-1,1-dimethylethyl-isomer",1.0,0.94313204,1.0,True
+3009,D4-iso-THC,0.0,0.036042247,0.0,True
+2560,Ketanserin,0.0,0.035198156,0.0,True
+2111,METHYL 2-TRIMETHYLSILOXY-OCTADECANOATE,0.0,0.036395047,0.0,True
+227,08-05,1.0,0.9576901,1.0,True
+872,amb,1.0,0.9574741,1.0,True
+1717,"2,8-DIACETOXYETHYL-2,8-DIMETHYL-6-HEXYL-3,4,9,10-TETRAHYDRO-2H,8H-BENZO(1,2-B:3,4-B')DIPYRAN",0.0,0.037337795,0.0,True
+891,adb-pinaca-n-5-hydroxypentyl-metabolite,1.0,0.9580066,1.0,True
+2888,Cariprazine,0.0,0.035497118,0.0,True
+1755,ALDOSTERONE,0.0,0.035504125,0.0,True
+1030,"jwh-018-n-2,2-dimethylpropyl-isomer",1.0,0.95818335,1.0,True
+682,cumyl-cbmica,1.0,0.95798,1.0,True
+2413,ortho-methoxy-Butyryl fentanyl,0.0,0.036161136,0.0,True
+1071,"jwh-018-n-2,2-dimethylpropyl-isomer",1.0,0.9581824,1.0,True
+2726,N-(6-APDB) Fentanyl,0.0,0.036339734,0.0,True
+2922,Diltiazem,0.0,0.03658693,0.0,True
+3087,"3,4-Difluoro U-51754",0.0,0.063431464,0.0,True
+2218,ortho-methyl Phenyl fentanyl,0.0,0.03543598,0.0,True
+1593,"2,3-BIS(TRIMETHYLSILYL)OCTAMETHYLTETRASILANE",0.0,0.036154397,0.0,True
+14,jwh-210,1.0,0.95785505,1.0,True
+849,jwh-203-n-5-hydroxypentyl-metabolite,1.0,0.9521266,1.0,True
+2690,a-methyl Fentanyl,0.0,0.03571641,0.0,True
+242,09-10,1.0,0.95791924,1.0,True
+287,14-05,1.0,0.9538858,1.0,True
+837,rcs-4-m10-metabolite,1.0,0.957455,1.0,True
+1238,ab-001,1.0,0.3682128,0.0,False
+1671,ALPHA-SPINASTEROL ACETATE,0.0,0.03638668,0.0,True
+3004,Oxazolam,0.0,0.036311723,0.0,True
+717,amp-4en-pinaca,1.0,0.9574654,1.0,True
+2347,"2'-Fluoro, ortho-fluoro-cis-3-methyl Fentanyl",0.0,0.036460474,0.0,True
+2716,Bambuterol,0.0,0.037124652,0.0,True
+1603,DI(4-BROMOPHENYL)METHYLPHENYLSILANE,0.0,0.034976307,0.0,True
+95,AM2201 N-(4-hydroxypentyl) metabolite,1.0,0.036107875,0.0,False
+1794,"(6Z,9Z)-6,9-HENTRIACONTADIENE",0.0,0.03579516,0.0,True
+377,24-05,1.0,0.9578989,1.0,True
+2490,Cyclopentyl fentanyl-d5,0.0,0.03725349,0.0,True
+354,22-02,1.0,0.9580328,1.0,True
+973,adb-bica,1.0,0.95723224,1.0,True
+2146,"1,3-DI-O-TRIMETHYLSILYL TETRADECASPHINGANINE",0.0,0.036515106,0.0,True
+938,xlr11-n-4-hydroxypentyl-metabolite-d5,1.0,0.9583753,1.0,True
+2686,W-19,0.0,0.035621095,0.0,True
+2368,N-Pyrrolidino 4'-hydroxy Nitazene,0.0,0.036114555,0.0,True
+358,22-06,1.0,0.95818335,1.0,True
+238,09-06,1.0,0.9581219,1.0,True
+2984,7-Aminoflunitrazepam,0.0,0.0354313,0.0,True
+2695,25C-NB4OMe Acetyl derivative,0.0,0.03706858,0.0,True
+2543,para-fluoro Acrylfentanyl,0.0,0.03646038,0.0,True
+1877,SITOSTEROL,0.0,0.035796408,0.0,True
+2982,25I-NBOMe imine,0.0,0.03691388,0.0,True
+3428,"5a-Androstan-3,6,17-trione",0.0,0.036201175,0.0,True
+755,MN-18,1.0,0.036194906,0.0,False
+1317,4-chloro-cumyl-pinaca,1.0,0.957696,1.0,True
+2429,9(R)-Hexahydrocannabinol Acetate,0.0,0.036400843,0.0,True
+3098,10.alpha.-hydroxy-.DELTA.8-THC,0.0,0.035440598,0.0,True
+2372,a-methyl Butyryl fentanyl,0.0,0.035936598,0.0,True
+2258,trans-3-Methyl Thiofentanyl,0.0,0.03607492,0.0,True
+379,24-07,1.0,0.9579347,1.0,True
+1138,jwh-348,1.0,0.9585618,1.0,True
+1618,"1,2-BIS(1-NAPHTHYL)TETRAMETHYLDISILANE",0.0,0.036607638,0.0,True
+3299,4-Benzylpyrimidine,0.0,0.036429804,0.0,True
+2578,Phenyl U-47700,0.0,0.035157576,0.0,True
+2665,Cannabiripsol,0.0,0.035280786,0.0,True
+686,5-fluoro-emb-pica,1.0,0.9487697,1.0,True
+2658,25T2-NB4OMe-imine,0.0,0.037857667,0.0,True
+2010,N-(2-BUTOXY-4-QUINOLINECARBONYL)GLYCINE TRIMETHYLSILYL ESTER,0.0,0.03559606,0.0,True
+235,09-03,1.0,0.95812756,1.0,True
+91,EAM2201,1.0,0.03548107,0.0,False
+1842,"ETHYL 1-(3-(3,5-DINITROBENZAMIDO)BUTYL)-2-METHYLINDOLE-3-CARBOXYLATE",0.0,0.036172446,0.0,True
+2802,"2,2,3,3-tetramethyl-Cyclopropyl fentanyl",0.0,0.040897205,0.0,True
+1247,pb-22-methylester-analogue,1.0,0.9574898,1.0,True
+241,09-09,1.0,0.95791715,1.0,True
+1099,jwh-081-5-methoxynaphthyl-isomer,1.0,0.95811266,1.0,True
+3159,Despropionyl-2-fluorofentanyl,0.0,0.035249498,0.0,True
+2621,Glaucine,0.0,0.03621205,0.0,True
+3263,"1-methylamino-1-(3,4-methylenedioxyphenyl)ethane",0.0,0.036269628,0.0,True
+2135,"LANOSTA-8,24-DIEN-3-OL",0.0,0.035943024,0.0,True
+1497,"3alpha,12beta-Dihydroxy-5beta-cholan-24-oic acid Methyl ester",0.0,0.036231,0.0,True
+373,24-01,1.0,0.95798826,1.0,True
+2013,"2,8-DITRIMETHYLSILYLOXY-4-QUINOLINECARBOXYLIC ACID TRIMETHYLSILYL ESTER",0.0,0.036823954,0.0,True
+237,09-05,1.0,0.9580964,1.0,True
+1337,5-fluoro-emb-pica,1.0,0.9487697,1.0,True
+2282,Speciociliatine,0.0,0.03940464,0.0,True
+1489,"7alpha,12alpha-Dihydroxy-5beta-cholan-24-oic acid Methyl ester",0.0,0.036143888,0.0,True
+2247,25D-NB4OMe Acetyl derivative,0.0,0.03720887,0.0,True
+1974,DRAMAMINE,0.0,0.043407504,0.0,True
+3245,Erucic Acid,0.0,0.03601949,0.0,True
+2707,Remifentanil Acid,0.0,0.03551714,0.0,True
+2034,DIOCTYL SEBACATE,0.0,0.035373054,0.0,True
+2800,para-Chloro Cyclopentyl fentanyl,0.0,0.036597382,0.0,True
+2724,para-Methoxyfentanyl,0.0,0.03582566,0.0,True
+381,24-09,1.0,0.95779675,1.0,True
+2489,3'-methoxy Metodesnitazene,0.0,0.035920493,0.0,True
+1101,jwh-267,1.0,0.95839983,1.0,True
+2470,Anileridine,0.0,0.036576625,0.0,True
+356,22-04,1.0,0.9575952,1.0,True
+1454,Chlorogenic acid,0.0,0.03663441,0.0,True
+1226,5-fluoro-ab-pinaca-n-4-hydroxypentyl-metabolite,1.0,0.95803094,1.0,True
+2836,(.+/-.)-.alpha.-Tocopherol,0.0,0.046370707,0.0,True
+224,08-02,1.0,0.95767087,1.0,True
+2004,2-(3-TRIMETHYLSILYLOXYBUTOXY)-N-(2-(DIETHYLAMINO)ETHYL)-3-PYRIDINECARBOXAMIDE,0.0,0.03774295,0.0,True
+3008,4-AcO-DALT,0.0,0.036453474,0.0,True
+2778,Verapamil,0.0,0.036464024,0.0,True
+3354,4-Methoxypropylamphetamine TFA Derivative,0.0,0.038555857,0.0,True
+3014,Dehydrochloromethyl Testosterone,0.0,0.03528038,0.0,True
+232,08-10,1.0,0.95779335,1.0,True
+1499,"3alpha,12alpha-Dihydroxy-5beta-cholan-24-oic acid Methyl ester",0.0,0.035407856,0.0,True
+1991,"PERFLUORO-1,1-DIMETHYLCYCLOPENTANE",0.0,0.036364462,0.0,True
+2779,2-Bromo-Lysergic Acid Diethylamide,0.0,0.043780793,0.0,True
+2862,(.+/-.)-.alpha.-Tocopherol Acetate,0.0,0.09549875,0.0,True
+1811,"6,6'-DIBROMOINDIGOTIN",0.0,0.03605207,0.0,True
+1505,"3beta,7beta,12alpha-Trihydroxy-5alpha-cholan-24-oic acid Methyl ester",0.0,0.035165768,0.0,True
+1981,3-TRIMETHYLSILYLOXYCHOLEST-5-ENE,0.0,0.03586322,0.0,True
+2036,TRIBUTYL CITRATE,0.0,0.036318254,0.0,True
+1187,jwh-019-5-hydroxyindole-metabolite,1.0,0.9580143,1.0,True
+1522,"3beta,7alpha-Dihydroxy-5alpha-cholan-24-oic acid Methyl ester",0.0,0.035294194,0.0,True
+2505,para-Fluoro Methoxyacetyl fentanyl,0.0,0.03549133,0.0,True
+2600,CBDP,0.0,0.037767608,0.0,True
+2011,2-(2-TRIMETHYLSILYLOXYETHOXY)-N-(2-(DIETHYLAMINO)ETHYL)-4-QUINOLINECARBOXAMIDE,0.0,0.036833435,0.0,True
+906,5-fluoro-pb-22-5-hydroxyisoquinoline-isomer,1.0,0.9331957,1.0,True
+231,08-09,1.0,0.95774007,1.0,True
+1825,ADIPIC ACID DI-2-ETHYLHEXYL ESTER,0.0,0.036678486,0.0,True
+2927,N-(DOET) Fentanyl,0.0,0.03657338,0.0,True
+2251,N-Pyrrolidino Etonitazene,0.0,0.036208384,0.0,True
+1864,MONOSTEARIN,0.0,0.034701683,0.0,True
+239,09-07,1.0,0.9580719,1.0,True
+932,app-fubinaca,1.0,0.94577736,1.0,True
+1452,Cyanine,0.0,0.15711728,0.0,True
+2584,para-chloro Valeryl fentanyl,0.0,0.03564264,0.0,True
+284,14-02,1.0,0.9531086,1.0,True
+2777,Thiothixene,0.0,0.036549095,0.0,True
+101,ab-fubinaca-isomer-1,1.0,0.95672536,1.0,True
+939,"5,3-ab-chmfuppyca",1.0,0.95854306,1.0,True
+1808,"(1XI,2R,4AS,5S,8AS)-(+)-1-(3,3-ETHYLENEDIOXYMETHYL)-1-HYDROXY-2ALPHA,5BETA,8ABETA-TRIMETHYLDECAHYDRONAPHTHALENE",0.0,0.035090834,0.0,True
+1292,2-fluoro-amb,1.0,0.9568122,1.0,True
+925,fab-144,1.0,0.95792735,1.0,True
+2918,25I-NBOMe 4-methoxy isomer,0.0,0.040885646,0.0,True
+1838,"5-(2-ACETOXYETHYLAMINO)-3-METHOXY-2,6-DIMETHYL-(6R*)-((2R*)-2-METHYLBUTYRYLOXY)-2,4-CYCLOHEXADIEN-1-ONE",0.0,0.035331182,0.0,True
+73,F2201,1.0,0.03769902,0.0,False
+2212,Fentanyl Carbamate,0.0,0.045216,0.0,True
+653,4-chloro-cumyl-pinaca,1.0,0.957696,1.0,True
+230,08-08,1.0,0.95774066,1.0,True
+1170,jwh-018-n-3-methylbutyl-isomer,1.0,0.9581965,1.0,True
+1967,CHOLESTANE,0.0,0.035182875,0.0,True
+2646,Ethyl Loflazepate,0.0,0.036405627,0.0,True
+984,ab-5-primebr-inaca,1.0,0.95782006,1.0,True
+1000,4-fluoro-mbzp,1.0,0.9549442,1.0,True
+641,mep-fubinaca,1.0,0.9536055,1.0,True
+2768,25I-NB-3-F Acetyl derivative,0.0,0.03653113,0.0,True
+2109,METHYL 2-TRIMETHYLSILOXY-DOCOSANOATE,0.0,0.03636602,0.0,True
+2314,ortho-Fluorofentanyl,0.0,0.03568033,0.0,True
+1465,"3beta,6beta,7alpha-Trihydroxy-5beta-cholan-24-oic acid Methyl ester",0.0,0.036390617,0.0,True
+3044,Bromo-DragonFLY,0.0,0.043719817,0.0,True
+1491,7alpha-Hydroxy-5beta-cholan-24-oic acid Methyl ester,0.0,0.035492804,0.0,True
+2542,4'-Methyl acetyl fentanyl-d5,0.0,0.035920892,0.0,True
+2318,"N-((1R,2R)-2-(dimethylamino)cyclohexyl)-3,4-dichlorobenzsulfonamide",0.0,0.16080531,0.0,True
+1080,jwh-018-2-naphthyl-isomer,1.0,0.9577424,1.0,True
+2650,N-CBz Norfentanyl,0.0,0.03551292,0.0,True
+2177,3-Methyl butyryl fentanyl,0.0,0.036163647,0.0,True
+1853,"LABDA-7,14-DIEN-13(R)-OL-ALPHA-L-6-DEOXYIDOPYRANOSIDE",0.0,0.03555374,0.0,True
+1425,17-05,0.0,0.035136446,0.0,True
+119,APINAC,1.0,0.03681045,0.0,False
+627,ab-bica,1.0,0.9585479,1.0,True
+355,22-03,1.0,0.95747,1.0,True
+1615,6-(ISOBUTYLDIMETHYLSILYL)-2-(PENTAMETHYLDISILANYL)-5-(TRIMETHYLSILYL)NAPHTHALENE,0.0,0.03596237,0.0,True
+283,14-01,1.0,0.95710915,1.0,True
+934,mo-chminaca,1.0,0.95752865,1.0,True
+2439,Lysergic Acid TBDMS Derivative,0.0,0.057454936,0.0,True
+1706,"CIS-5-(6-(1,3-DITHIAN-2-YL)HEXYL)-TRANS-4-FORMYL-2,REF.-3-DIPHENYLISOXAZOLIDINE",0.0,0.036093198,0.0,True
+375,24-03,1.0,0.95770043,1.0,True
+965,2-fluoro-adb,1.0,0.9578441,1.0,True
+3122,N-Phenylacetyl-L-prolylglycine ethyl ester,0.0,0.035908658,0.0,True
+2530,N-Desethyl protonitazene,0.0,0.037086092,0.0,True
+2026,TRIS(2-ETHYLHEXYL)PHOSPHATE,0.0,0.036459662,0.0,True
+1009,ch-fubiata,1.0,0.94418174,1.0,True
+1801,3-PYRIDYLMETHYL OCTADEC-9-ENOATE,0.0,0.06497328,0.0,True
+1385,Cannabigerol diacetate,0.0,0.03983734,0.0,True
+1698,"O,O-DIETHYL S-(6-CHLOROBENZOXZAOLON-3-YL)METHYL PHOSPHORODITHIOATE",0.0,0.035635453,0.0,True
+694,benzyl-4-cyano-butinaca,1.0,0.95576215,1.0,True
+97,jwh-122-n-4-pentenyl-analog,1.0,0.9579724,1.0,True
+1878,SITOSTEROL ACETATE,0.0,0.035189155,0.0,True
+1952,(3-PYRIDYL)METHYL 4-ETHYL-14-METHYLPENTADECANOATE,0.0,0.035766467,0.0,True
+289,14-07,1.0,0.9571997,1.0,True
+893,5-fluoro-ab-pinaca-n-4-hydroxypentyl-metabolite,1.0,0.9580274,1.0,True
+2893,25T7-NBOMe-TFA,0.0,0.03701344,0.0,True
+966,2-fluoro-amb,1.0,0.95677185,1.0,True
+3138,Letrozole,0.0,0.035656665,0.0,True
+2884,Isotonitazene uncyclized intermediate,0.0,0.044722512,0.0,True
+471,34-09,1.0,0.9506362,1.0,True
+228,08-06,1.0,0.9576252,1.0,True
+3125,11-Hydroxy-9(S)-Hexahydrocannabinol,0.0,0.03460027,0.0,True
+3053,gamma-Linolenic Acid methyl ester,0.0,0.035378363,0.0,True
+1938,"2-(N,N-DI(TRIMETHYLSILYL)AMINO)ETHYLPHOSPHONIC ACID DI(TRIMETHYLSILYL) ESTER",0.0,0.03636561,0.0,True
+2154,TRIACONTANE,0.0,0.038206622,0.0,True
+1874,PERICYAZINE,0.0,0.03696388,0.0,True
+288,14-06,1.0,0.954318,1.0,True
+380,24-08,1.0,0.95774215,1.0,True
+1609,"1,1,2,2,5,5,6,6-OCTETHYL-1,2,5,6-TETRASILACYCLOOCTA-3,7-DIYNE",0.0,0.03748714,0.0,True
+2120,3-O-TRIMETHYLSILYLESTRONE 17-(O-METHYL)OXIME,0.0,0.035240818,0.0,True
+689,mdmb-3en-butinaca-butanoic-acid-metabolite,1.0,0.95855916,1.0,True
+1617,"1,4-BIS(CHLOROMETHYLPHENYLSILYL)NAPHTHALENE",0.0,0.035891946,0.0,True
+2620,iso-Hexahydrocannabinol acetate,0.0,0.03713191,0.0,True
+2638,para-Fluoro Furanyl fentanyl,0.0,0.03598836,0.0,True
+3119,Dihomo-.gamma.-Linolenic Acid methyl ester,0.0,0.03559761,0.0,True
+880,ab-fubinaca-3-fluorobenzyl-isomer,1.0,0.9578062,1.0,True
+3315,4'-fluoro-Pyrrolidinohexanophenone,0.0,0.06817269,0.0,True
+2012,"2,6-DITRIMETHYLSILYLOXY-4-QUINOLINECARBOXYLIC ACID TRIMETHYLSILYL ESTER",0.0,0.035425678,0.0,True
+2576,"4'-Fluoro, ortho-fluoro-cis-3-methyl Fentanyl",0.0,0.036121417,0.0,True
+708,4-chloro-mdmb-butica,1.0,0.9575031,1.0,True
+1983,"2-(2-BUTYL-5-METHYL-1,3,2-DIOXABOROLAN-4-YL)METHOXY-N-(2-ETHYLAMINOETHYL)-4-QUINOLINECARBOXAMIDE",0.0,0.036298927,0.0,True
+28,jwh-018-adamantyl-analog,1.0,0.9486006,1.0,True
+1743,"3,7,11,15-TETRAMETHYL-2,6,10,14-HEXADECATETRAENE-1-OL TRIMETHYLSILYL ETHER",0.0,0.035344962,0.0,True
+2456,3-Fluorofentanyl,0.0,0.036101352,0.0,True
+2374,4-Methyl Fentanyl,0.0,0.037080124,0.0,True
+1115,jwh-249,1.0,0.9528335,1.0,True
+1770,PENTACOSANE,0.0,0.036962405,0.0,True
+2008,2-(2-TRIMETHYLSILYLOXYETHOXY)-N-(2-(ETHYLAMINO)ETHYL)-4-QUINOLINECARBOXAMIDE,0.0,0.035552237,0.0,True
+3191,Dihydrotestosterone,0.0,0.035529573,0.0,True
+3224,Atropine,0.0,0.03602005,0.0,True
+1456,"3beta,4beta,7alpha,12alpha-Tetrahydroxy-5beta-cholan-24-oic acid Methyl ester",0.0,0.035556603,0.0,True
+3018,Norgestrel,0.0,0.035420757,0.0,True
+1054,adb-5-primebr-pinaca-n-4-hydroxypentyl-metabolite,1.0,0.9583605,1.0,True
+1545,(22Alpha)-hydroxy-campest-4-en-3-one,0.0,0.036172844,0.0,True
+877,thj-2201,1.0,0.95823,1.0,True
+2799,1-Testosterone Cypionate,0.0,0.037638858,0.0,True
+1607,1-(PENTAMETHYLDISILANYL)-4-(1-PHENYLTETRAMETHYLDISILANYL)BUT-1-EN-3-YNE,0.0,0.035425693,0.0,True
+3256,N-formyl-1-phenylethylamine,0.0,0.03643514,0.0,True
+1854,"LABDA-7,14-DIEN-13(R)-OL-BETA-D-FUCOPYRANOSIDE",0.0,0.034829877,0.0,True
+760,Mepirapim,1.0,0.053039186,0.0,False
+2564,Fluadinazolam,0.0,0.036479585,0.0,True
+2528,Ocfentanil,0.0,0.035932716,0.0,True
+847,rcs-4-4-hydroxyphenyl-metabolite,1.0,0.95741326,1.0,True
+3174,Cannabinerol,0.0,0.03567558,0.0,True
+1585,"1,5-BIS(METHYLPHENYLSILYL)NAPHTHALENE",0.0,0.035970263,0.0,True
+746,"jwh-018-2-naphthyl-n-1,2-dimethylpropyl-isomer",1.0,0.93591857,1.0,True
+46,jwh-146,1.0,0.95837015,1.0,True
+1596,"(TRIMETHYL-1,1-DIPHENYLDISILANYL)TRIMETHYLSILYLACETYLENE",0.0,0.035817184,0.0,True
+3172,Linoleic Acid methyl ester,0.0,0.03560457,0.0,True
+3328,6-APDB,0.0,0.03792153,0.0,True
+1281,eg-2201,1.0,0.95777714,1.0,True
+2592,Phenyl fentanyl-d5,0.0,0.03451945,0.0,True
+767,AM694 (exempt preparation),1.0,0.088878326,0.0,False
+2704,para-methoxy Butyryl fentanyl previously name 4-methoxy-Butyryl fentanyl (hydrochloride),0.0,0.04101323,0.0,True
+3244,"9b,10b-epoxy Hexahydrocannabinol",0.0,0.034990635,0.0,True
+3198,Oleamide,0.0,0.034878246,0.0,True
+2857,Diundecyl phthalate,0.0,0.03681086,0.0,True
+2158,ALPHA-(4-DIMETHYLAMINOPHENYL)-OMEGA-(9-PHENANTHRYL)HEXANE,0.0,0.03849734,0.0,True
+1776,"TETRADECANAL O-2,3,4,5,6-PENTAFLUOROBENZYLOXIME",0.0,0.035152018,0.0,True
+3267,4-fluoro-.alpha.-Methylaminoisohexanophenone,0.0,0.036344044,0.0,True
+954,mdmb-fubinaca,1.0,0.95606595,1.0,True
+3288,"N-benzyl-3,4-Dimethoxyamphetamine",0.0,0.0432224,0.0,True
+382,24-10,1.0,0.957766,1.0,True
+1519,"3alpha,12alpha-Dihydroxy-5alpha-cholan-24-oic acid Methyl ester",0.0,0.034870766,0.0,True
+286,14-04,1.0,0.9360366,1.0,True
+3045,Ergonovine,0.0,0.035498876,0.0,True
+1189,jwh-073-n-3-hydroxybutyl-metabolite,1.0,0.9581433,1.0,True
+1270,cumyl-bica,1.0,0.9559292,1.0,True
+3437,Pyrazinamide,0.0,0.083157785,0.0,True
+1884,"ETHYL (4R*,5R*)-(E)-4-(2'-TETRAHYDROPYRANYL)OXY-5-(TERT-BUTYLDIMETHYLSILYL)OXY-2-HEXENOATE",0.0,0.03587605,0.0,True
+1023,jwh-018-2-naphthyl-isomer,1.0,0.9579639,1.0,True
+2141,"1-TETRADECYL-2,3-DITRIMETHYLSILYLGLYCEROL",0.0,0.03570945,0.0,True
+3147,Dihydrocodeine,0.0,0.034897752,0.0,True
+2438,nor-Mephedrone-HFBA Derivative,0.0,0.035997376,0.0,True
+3057,Reboxetine,0.0,0.035893045,0.0,True
+2163,"2,5-BIS(TRIMETHYLSILYLMETHYL)-5-HYDROXY-8-ISOPROPYL-1,4,4A,5,6,7,8,8A-OCTAHYDRONAPHTHALENE",0.0,0.036992677,0.0,True
+2481,N-benzyl para-fluoro Cyclopropyl norfentanyl,0.0,0.035853826,0.0,True
+1796,OCTACOSANE,0.0,0.035731014,0.0,True
+2194,Phenylpiperazine-HFBA Derivative,0.0,0.03682415,0.0,True
+1432,25-02,0.0,0.0358335,0.0,True
+2642,Thiophene fentanyl (previously Thiofuranyl fentanyl),0.0,0.03498628,0.0,True
+2912,2-Fluoro QMPSB,0.0,0.23484486,0.0,True
+2504,Terazosin,0.0,0.03773198,0.0,True
+1688,"(1R(*),2R(*),3R(*),6S(*),7R(*),9R(*),10S(*),11Z,14R(*))-6-ACETOXYEUNICELLA-11-ENE-3,7-DIOL",0.0,0.035036035,0.0,True
+967,4-fluoro-amb,1.0,0.95816576,1.0,True
+1613,"1,1,3,3-TETRAMETHYL-2-MESITYL-1,3-DIPHENYLTRISILANE",0.0,0.03502593,0.0,True
+1915,"1,1-BIS(TERT-BUTYLDIMETHYLSILYL)-2,2-BIS(TRIMETHYLSILYL)ETHYLENE",0.0,0.036211118,0.0,True
+1216,jwh-081-n-4-hydroxypentyl-metabolite,1.0,0.95779455,1.0,True
+2598,Heroin-d9,0.0,0.035595868,0.0,True
+2049,DI(2-ETHYL HEXYL)PHTHALATE,0.0,0.03657002,0.0,True
+376,24-04,1.0,0.95762587,1.0,True
+291,14-09,1.0,0.95489335,1.0,True
+1888,"3-(2-BENZOYLAMINOPHENYLTHIO)-5,5-DIMETHYL-1-CYCLOHEXANONE",0.0,0.035736073,0.0,True
+3185,4-Bromo-.alpha.-PVP,0.0,0.037936945,0.0,True
+2389,.alpha.-Methylfentanyl,0.0,0.035044048,0.0,True
+2447,Clotrimazole,0.0,0.03620522,0.0,True
+2767,Testosterone Enanthate,0.0,0.036592506,0.0,True
+936,fub-npb-22,1.0,0.7898518,1.0,True
+2223,Phenyl fentanyl,0.0,0.035066217,0.0,True
+790,jwh-081-5-methoxynaphthyl-isomer,1.0,0.958128,1.0,True
+2965,N-(2C-T-7) Fentanyl,0.0,0.03558793,0.0,True
+2502,1cP-LSD,0.0,0.061805423,0.0,True
+374,24-02,1.0,0.9577368,1.0,True
+155,2-fluoro-adb,1.0,0.9578463,1.0,True
+285,14-03,1.0,0.95526665,1.0,True
+102,thj2201,1.0,0.958311,1.0,True
+3449,BMPEA,0.0,0.0598603,0.0,True
+2677,Etizolam-d4,0.0,0.03499628,0.0,True
+2342,25T2-NB4OMe,0.0,0.036595583,0.0,True
+1093,jwh-122-3-methylnaphthyl-isomer,1.0,0.9578361,1.0,True
+1479,"3beta,7beta,12alpha-Trihydroxy-5beta-cholan-24-oic acid Methyl ester",0.0,0.03582234,0.0,True
+2772,4-Methoxypropylamphetamine HFB Derivative,0.0,0.2799266,0.0,True
+2889,2C-T-7 HFBA Derivative,0.0,0.03568599,0.0,True
+223,08-01,1.0,0.95778036,1.0,True
+3094,"3,4-Dichloro-.alpha.-Pyrrolidinoisohexanophenone",0.0,0.038238596,0.0,True
+1906,BIS(O-FLUOROPHENYL)MERCURY,0.0,0.0355804,0.0,True
+229,08-07,1.0,0.9575845,1.0,True
+2518,para-fluoro Cyclopropyl fentanyl,0.0,0.035759185,0.0,True
+3036,Hydrocodone,0.0,0.03516008,0.0,True
+359,22-07,1.0,0.95775026,1.0,True
+2197,.beta.-hydroxy Fentanyl,0.0,0.035615172,0.0,True
+71,AM2201 8-quinolinyl carboxamide,1.0,0.048072588,0.0,False
+361,22-09,1.0,0.9571635,1.0,True
+3137,"3,4-difluoro Isopropyl U-47700",0.0,0.07293807,0.0,True
+2735,Norephedrine bis-TBDMS Derivative,0.0,0.037588783,0.0,True
+1386,Cannabinodiol,0.0,0.042622276,0.0,True
+3061,Bupivacaine,0.0,0.039424658,0.0,True
+1973,CARBETHYL SALICYLATE,0.0,0.036516633,0.0,True
+1535,beta-Chlorfenvinphos,0.0,0.035297286,0.0,True
+1074,"jwh-018-n-1,2-dimethylpropyl-isomer",1.0,0.94942826,1.0,True
+465,34-03,1.0,0.91749287,1.0,True
+2102,STIGMASTEROL,0.0,0.03578405,0.0,True
+107,mam2201,1.0,0.9578078,1.0,True
+2508,Tigloyl fentanyl,0.0,0.042779617,0.0,True
+1208,jwh-203-n-5-hydroxypentyl-metabolite,1.0,0.9553366,1.0,True
+3086,ortho-methyl Acetyl fentanyl,0.0,0.038602564,0.0,True
+642,azefubim,1.0,0.9022166,1.0,True
+3203,Cocaine,0.0,0.036429387,0.0,True
+2858,Cannabigerol diacetate,0.0,0.03983734,0.0,True
+1081,"jwh-018-2-naphthyl-n-1,2-dimethylpropyl-isomer",1.0,0.93682545,1.0,True
+1062,5-fluoro-adb-pinaca,1.0,0.95798916,1.0,True
+1391,Cannabinol,0.0,0.036974516,0.0,True
+128,"WIN 55,212-2",1.0,0.03780963,0.0,False
+2173,TRIPHENYLTIN CHLORIDE,0.0,0.037922114,0.0,True
+1293,4-fluoro-amb,1.0,0.9581664,1.0,True
+2051,"BIS(2,4-DINITROPHENYL)ETHER",0.0,0.035982024,0.0,True
+82,5-Fluoro MPP-PICA,1.0,0.036362343,0.0,False
+2296,N-benzyl meta-fluoro Norfentanyl,0.0,0.03552614,0.0,True
+771,5-fluoro ethylbenzyl-PICA,1.0,0.06833063,0.0,False
+1227,.alpha.-pbt,1.0,0.913903,1.0,True
+225,08-03,1.0,0.9577619,1.0,True
+3251,3-methoxymethamphetamine,0.0,0.0640258,0.0,True
+2388,"L-759,633",0.0,0.035548322,0.0,True
+1635,"ETHYL 4,7-DI(PARA-ETHOXYPHENYL)-1,2,5-THIADIAZOLO(3,4-C)PYRIDINE-6-CARBOXYLATE",0.0,0.03759884,0.0,True
+2393,N-Benzyl meta-fluoro Norfentanyl,0.0,0.035307944,0.0,True
+2189,meta-fluoro Methoxyacetyl fentanyl,0.0,0.040835675,0.0,True
+1423,17-03,0.0,0.035560485,0.0,True
+1647,"SYN-15-TERT-BUTYL-18-METHOXY-5,6,7,9-TETRAFLUORO-2,11-DITHIA(3.3)METACYCLOPHANE 2,2,11,11-TETRAOXIDE",0.0,0.036328103,0.0,True
+1405,Cannabidivarin diacetate,0.0,0.036105707,0.0,True
+875,5-fluoro-abica,1.0,0.9523578,1.0,True
+817,jwh-073-n-3-hydroxybutyl-metabolite,1.0,0.95813686,1.0,True
+2192,Flubromazolam-d4,0.0,0.035466228,0.0,True
+3415,Pterostilbene,0.0,0.035574358,0.0,True
+1413,01-03,0.0,0.03693529,0.0,True
+633,eg2201,1.0,0.9579502,1.0,True
+2941,Brorphine-d7,0.0,0.041001342,0.0,True
+353,22-01,1.0,0.95784926,1.0,True
+234,09-02,1.0,0.9581768,1.0,True
+2948,Loperamide,0.0,0.036392562,0.0,True
+1207,jwh-146,1.0,0.9584013,1.0,True
+1574,"3,4-BIS(METHOXYCARBONYL)-1-METHYL-2,5-DIPHENYL-3-PYRROLINE",0.0,0.0352879,0.0,True
+2809,para-Chloro Furanyl fentanyl 3-furancarboxamide,0.0,0.035603758,0.0,True
+2075,"1,3,4,5,7-PENTA-O-ACETYL-2,6-ANHYDRO-D-GLYCERO-D-GULO-HEPTITOL",0.0,0.03590102,0.0,True
+829,jwh-019-5-hydroxyindole-metabolite,1.0,0.9580782,1.0,True
+747,jwh-210-3-ethylnaphthyl-isomer,1.0,0.9579676,1.0,True
+2298,LSD TMS Derivative,0.0,0.04000059,0.0,True
+3407,Dichloropane,0.0,0.035258852,0.0,True
+1381,Cannabiorcol,0.0,0.03546149,0.0,True
+2817,7-hydroxy Mitragynine-d3,0.0,0.036581095,0.0,True
+2568,Norephedrine TPC Derivative,0.0,0.03567244,0.0,True
+3416,25B-NB4OMe TFA derivative,0.0,0.038022988,0.0,True
+2944,25I-NB4OMe,0.0,0.03709275,0.0,True
+2587,para-methoxy Acetyl fentanyl,0.0,0.036587883,0.0,True
+730,"jwh-018-n-1,2-dimethylpropyl-isomer",1.0,0.9558286,1.0,True
+3308,"N-((1R,2R)-2-(dimethylamino)cyclohexyl)-N-methyl-3-pyridinecarboxamide",0.0,0.03549189,0.0,True
+1937,"1,1-BIS(PARA-CHLOROPHENYL)-1-CHLORO-2,2,2-TRICHLOROETHANE",0.0,0.0537631,0.0,True
+864,jwh-081-n-4-hydroxypentyl-metabolite,1.0,0.9577539,1.0,True
+1608,"1,4-BIS(CHLOROMETHYLPHENYLSILYL)BENZENE",0.0,0.036607422,0.0,True
+233,09-01,1.0,0.9580408,1.0,True
+1920,"(6E,10E)-1-AETOXY-14-(1-METHYL-1,2-EPOXYETHYL)-2,3-EPOXY-3,7,11-TRIMETHYLCYCLOTETRADECADIENE",0.0,0.035127316,0.0,True
+2058,ACETOPHENAZINE,0.0,0.037956443,0.0,True
+2647,para-Chloro Methoxyacetyl fentanyl,0.0,0.03491527,0.0,True
+2404,para-fluoro Cyclopentyl fentanyl,0.0,0.03585059,0.0,True
+24,jwh-249,1.0,0.9532809,1.0,True
+2063,DECAFLUOROBENZOPHENONE,0.0,0.035894983,0.0,True
+360,22-08,1.0,0.95784605,1.0,True
+470,34-08,1.0,0.9487426,1.0,True
+1863,1-MONOOLEIN,0.0,0.035329774,0.0,True
+1958,"1,2,4,5-TETRA-O-ACETYL-3,6-DI-O-METHYLHEXITOL (1-D)",0.0,0.03490793,0.0,True
+2693,AL-NBF,0.0,0.037688486,0.0,True
+1894,2-(4-(4-PHENOXYPHENYL)-6-PHENYL-2-PYRIMIDINYLAMINO)BENZOIC ACID METHYL ESTER,0.0,0.03573558,0.0,True
+3375,Mibolerone,0.0,0.03507761,0.0,True
+357,22-05,1.0,0.95751065,1.0,True
+240,09-08,1.0,0.9581387,1.0,True
+1678,"2,3,4,6,7-PENTAACETOXYTROPONE",0.0,0.03619784,0.0,True
+1350,4-fluoro-mbzp,1.0,0.9549442,1.0,True
+1786,LANOSTEROL,0.0,0.035370532,0.0,True
+1709,"4-METHOXYCARBONYL-6-ETHYL-5-PHENYL-2-(PARA-TOLYL)PERHYDROPYRROLO(3,4-C)PYRROLE-1,3-DIONE (3A,4-CIS-6,6A-TRANS)",0.0,0.036024984,0.0,True
+56,jwh-182,1.0,0.9581395,1.0,True
+1762,CONDRILLASTEROL,0.0,0.03540763,0.0,True
+362,22-10,1.0,0.95748246,1.0,True
+1988,2-TRIMETHYLSILYLOXY-N-(2-(DIETHYLAMINO)ETHYL)-4-QUINOLINECARBOXAMIDE,0.0,0.035450924,0.0,True
+1816,N-ACETYLVALYLGLYCYLGLYCYLVALINE METHYL ESTER,0.0,0.035699334,0.0,True
+1345,4-chloro-mdmb-butica,1.0,0.9575031,1.0,True
+1703,"CIS-5-(6-CARBOXYHEXYL)-TRANS-4-(CIS-1-OCTENYL)-2,REF.-3-DIPHENYLISOXAZOLIDINE",0.0,0.03541315,0.0,True
+1036,jwh-018-n-5-chloropentyl-analog,1.0,0.95822215,1.0,True
+3007,Testosterone,0.0,0.035022005,0.0,True
+246,10-04,1.0,0.95742595,1.0,True
+2166,(3R)-4-(METHOXYMETHYL-THIO)-3-(N-METHOXYMETHYL-N-TOSYL)AMINOBUTAN-2-ONE,0.0,0.037292495,0.0,True
+1510,"3alpha,7alpha,12beta-Trihydroxy-5alpha-cholan-24-oic acid Methyl ester",0.0,0.035023835,0.0,True
+1120,jwh-210-3-ethylnaphthyl-isomer,1.0,0.95798576,1.0,True
+1513,"7alpha,12beta-Dihydroxy-5alpha-cholan-24-oic acid Methyl ester",0.0,0.034947164,0.0,True
+3339,alpha-Hydroxyalprazolam,0.0,0.035715934,0.0,True
+1758,MEVINOLINE,0.0,0.034647543,0.0,True
+1728,"2-(N-(2-CARBOXYPHENYL)ACETAMIDE-1-XY)-3,4-DIHYDRO-6-METHOXY-2,5,7,8-TETRAMETHYL-2H-1-BENZOPYRAN",0.0,0.036159866,0.0,True
+1104,"jwh-073-n-1,1-dimethylethyl-isomer",1.0,0.94457614,1.0,True
+136,MN-25-2-methyl derivative,1.0,0.03663703,0.0,False
+738,jwh-122-3-methylnaphthyl-isomer,1.0,0.95784265,1.0,True
+2268,ortho-Methyl Cyclopropyl fentanyl,0.0,0.041268088,0.0,True
