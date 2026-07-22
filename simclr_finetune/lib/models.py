@@ -53,7 +53,7 @@ def load_pretrained_encoder(encoder_path, input_dim=561, hidden_dim=256, device=
     if not encoder_path.exists():
         raise FileNotFoundError(f"未找到预训练模型文件: {encoder_path}")
         
-    checkpoint = torch.load(str(encoder_path), map_location=dev)
+    checkpoint = torch.load(str(encoder_path), map_location=dev, weights_only=False)
     
     if isinstance(checkpoint, dict):
         if 'encoder_state_dict' in checkpoint:

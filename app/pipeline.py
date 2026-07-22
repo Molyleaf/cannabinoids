@@ -77,10 +77,12 @@ def get_classifier_model(safetensors_path: str = None) -> BinaryClassifier:
     global _classifier_model
     if _classifier_model is None:
         if safetensors_path is None:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            safetensors_path = os.path.join(
-                current_dir, "models", "binary_classifier_weights_20260722_172808.safetensors"
-            )
+            models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+            candidates = sorted(list(Path(models_dir).glob("*.safetensors")), key=lambda p: p.stat().st_mtime, reverse=True)
+            if candidates:
+                safetensors_path = str(candidates[0])
+            else:
+                safetensors_path = os.path.join(models_dir, "binary_classifier_weights_20260722_211225.safetensors")
             
         if not os.path.exists(safetensors_path):
             raise FileNotFoundError(

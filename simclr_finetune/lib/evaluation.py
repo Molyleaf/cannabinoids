@@ -373,5 +373,5 @@ def plot_confusion_matrices(train_results, val_results, test_results, output_dir
     plt.tight_layout()
     cm_path = output_dir / "confusion_matrix.png"
     plt.savefig(str(cm_path), dpi=300, bbox_inches='tight')
-    plt.close()
+    plt.close('all')
     print(f"  [OK] 混淆矩阵热力图已保存: {cm_path}")

@@ -56,5 +56,7 @@ data_preprocessed/
 *.npy
 *.pt
 *.msp
+*.safetensors
+*.xlsx
 
 app/cache/positive_idx/
