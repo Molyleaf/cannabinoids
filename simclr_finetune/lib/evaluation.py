@@ -22,8 +22,8 @@ def safe_auc(labels, probs):
         return 0.5
 
 
-def evaluate_model(model, data_loader, device='cuda'):
-    """运行谱图级别的评估逻辑"""
+def evaluate_model(model, data_loader, device='cuda', threshold=0.5):
+    """运行谱图级别的评估逻辑 (支持自定义分类概率阈值 threshold)"""
     dev = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
     model.eval()
     model.to(dev)
@@ -38,7 +38,7 @@ def evaluate_model(model, data_loader, device='cuda'):
             
             all_probs.extend(probs.cpu().numpy().ravel())
             all_labels.extend(batch_labels.numpy().ravel())
-            all_preds.extend((probs >= 0.5).float().cpu().numpy().ravel())
+            all_preds.extend((probs >= threshold).float().cpu().numpy().ravel())
             
     all_probs = np.array(all_probs)
     all_labels = np.array(all_labels)
@@ -52,6 +52,7 @@ def evaluate_model(model, data_loader, device='cuda'):
     cm = confusion_matrix(all_labels, all_preds)
     
     return {
+        'threshold': float(threshold),
         'accuracy': float(acc),
         'precision': float(prec),
         'recall': float(rec),
@@ -67,7 +68,7 @@ def evaluate_model(model, data_loader, device='cuda'):
     }
 
 
-def evaluate_positive_per_smiles(test_indices, smiles_all, labels_all, probs, preds):
+def evaluate_positive_per_smiles(test_indices, smiles_all, labels_all, probs, preds, threshold=0.5):
     """仅对阳性样本按 SMILES 聚合评估化合物级别的识别率"""
     test_labels = labels_all[test_indices]
     test_smiles = smiles_all[test_indices]
@@ -92,7 +93,7 @@ def evaluate_positive_per_smiles(test_indices, smiles_all, labels_all, probs, pr
         mean_prob = np.mean(pos_probs[idx_list])
         smiles_probs.append(mean_prob)
         smiles_labels.append(pos_labels[idx_list[0]])
-        smiles_preds.append(1.0 if mean_prob >= 0.5 else 0.0)
+        smiles_preds.append(1.0 if mean_prob >= threshold else 0.0)
         smiles_names.append(smi)
         smiles_counts.append(len(idx_list))
         
@@ -105,13 +106,14 @@ def evaluate_positive_per_smiles(test_indices, smiles_all, labels_all, probs, pr
     acc = n_correct / n_total if n_total > 0 else 0
     
     print(f"\n{'='*60}")
-    print("阳性样本-按 SMILES 聚合评估（化合物级别）")
+    print(f"阳性样本-按 SMILES 聚合评估 (化合物级别, 判定阈值={threshold:.2f})")
     print(f"{'='*60}")
     print(f"  阳性唯一 SMILES 数: {len(smiles_to_indices)}")
     print(f"  正确识别: {n_correct}/{n_total} 种化合物 ({acc:.2%})")
     print(f"  漏检:     {n_total - n_correct}/{n_total} 种化合物")
     
     return {
+        'threshold': float(threshold),
         'accuracy': float(acc),
         'n_smiles': int(len(smiles_to_indices)),
         'n_correct': n_correct,
