@@ -1,0 +1,162 @@
+{
+  "total_processed": 18914,
+  "total_valid": 18914,
+  "errors": 0,
+  "matched_count": 2,
+  "matched_percentage": "0.01%",
+  "high_risk_count": 367,
+  "high_risk_percentage": "1.94%",
+  "avg_risk_probability": 0.029182748228825207,
+  "top_high_risk_samples": [
+    {
+      "Index": 3475,
+      "Name": "4-DIACETYLAMINO-3-METHYLPHENYL ACETATE",
+      "Cleaned Peaks": 21,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9856,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 3925,
+      "Name": "ETHYL 4-PHENOXYBENZOATE",
+      "Cleaned Peaks": 46,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9847,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 10162,
+      "Name": "3,4,7-TRIMETHOXYCOUMARIN",
+      "Cleaned Peaks": 29,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9834,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 3266,
+      "Name": "(ALPHA,ALPHA,ALPHA-TRIFLUORO-PARA-TOLYL)ACETIC ACID",
+      "Cleaned Peaks": 25,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9828,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 8919,
+      "Name": "7-METHOXY-2,5-DIMETHYL-1,2,3,4-TETRAHYDROPYRIMIDO(1,6-A)INDOLE",
+      "Cleaned Peaks": 17,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9827,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 5641,
+      "Name": "3-(2-AMINOETHYL)-1-BENZYL-2-METHYLINDOLE",
+      "Cleaned Peaks": 30,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9795,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 16994,
+      "Name": "Homoveratric acid",
+      "Cleaned Peaks": 17,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9782,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 6260,
+      "Name": "2-(3,4-DIMETHOXYPHENYL)ETHANOIC ACID",
+      "Cleaned Peaks": 17,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9782,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 2606,
+      "Name": "PENICILIN S-OXIDE",
+      "Cleaned Peaks": 30,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9771,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 2225,
+      "Name": "ETHYL 2-FLUORENYLMETHYLCARBOXYLATE",
+      "Cleaned Peaks": 24,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9757,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 3920,
+      "Name": "ETHYL 3-PHENANTHRYLCARBOXYLATE",
+      "Cleaned Peaks": 50,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9757,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 8257,
+      "Name": "3-DIMETHYLAMINOMETHYL-4-(1-PYRROLIDINYL)-2(5H)-FURANONE",
+      "Cleaned Peaks": 32,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9738,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 12029,
+      "Name": "7-METHOXY-4-METHYLCOUMARIN",
+      "Cleaned Peaks": 25,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9734,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 5627,
+      "Name": "6,8-DIMETHYL-4-OXO-4H-PYRIDO(1,2-A)PYRIMIDINE-3-CARBOXYLIC ACID ETHYL ESTER",
+      "Cleaned Peaks": 29,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9719,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    },
+    {
+      "Index": 1008,
+      "Name": "ribose-5-phosphate",
+      "Cleaned Peaks": 92,
+      "Known Lib Matched": false,
+      "Matched SMILES": "N/A",
+      "Model Risk Prob": 0.9712,
+      "Model Risk Level": "High Risk (高风险)",
+      "Is High Risk": true
+    }
+  ]
+}

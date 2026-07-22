@@ -286,3 +286,170 @@ def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75)
         },
         "peaks": cleaned_peaks_arr.tolist()
     }
+
+
+def run_pipeline_batch(file_bytes: bytes, filename: str, min_similarity: float = 0.75, batch_size: int = 1024) -> dict:
+    """
+    测样管线批量处理函数：
+    能够高效处理包含成千上万条质谱的 MSP 或 MGF 文件。
+    1. 使用 format_msp_content 预处理标准化文本
+    2. 使用 ms_entropy 提取全部质谱数据并清洗峰
+    3. 批量使用 FlashEntropySearch 进行已知库匹配
+    4. 批量使用 PyTorch safetensors 神经分类器进行风险推理
+    5. 返回总体统计数据与逐条测试详情
+    """
+    ext = os.path.splitext(filename)[1].lower().replace('.', '')
+    if ext not in ['msp', 'mgf']:
+        ext = 'msp'
+
+    if ext == 'msp':
+        try:
+            content_str = file_bytes.decode('utf-8', errors='ignore')
+            formatted_str = format_msp_content(content_str)
+            file_bytes = formatted_str.encode('utf-8')
+        except Exception as e:
+            print(f"Warning: msp formatting failed, using raw bytes. Error: {str(e)}")
+
+    tmp_file = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False)
+    try:
+        tmp_file.write(file_bytes)
+        tmp_file.close()
+        tmp_path = tmp_file.name
+
+        raw_spectra_gen = ms_entropy.read_one_spectrum(tmp_path, file_type=ext)
+        if hasattr(raw_spectra_gen, "__iter__") and not isinstance(raw_spectra_gen, dict):
+            spectra_list = list(raw_spectra_gen)
+        else:
+            spectra_list = [raw_spectra_gen] if raw_spectra_gen else []
+    finally:
+        if 'tmp_path' in locals() and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+    if not spectra_list:
+        raise ValueError(f"Failed to parse any mass spectra from {filename}.")
+
+    total_count = len(spectra_list)
+    results_detail = []
+    vectors = []
+    valid_indices = []
+
+    # 1. 遍历质谱并进行清洗与准备
+    for idx, spec in enumerate(spectra_list):
+        spec_name = "Unknown"
+        precursor_mz = None
+        peaks_raw = None
+
+        if isinstance(spec, dict):
+            spec_name = spec.get("name", f"Spectrum_{idx+1}")
+            precursor_mz = spec.get("precursor_mz")
+            peaks_raw = spec.get("peaks")
+        elif hasattr(spec, "peaks"):
+            peaks_raw = spec.peaks
+            spec_name = getattr(spec, "name", f"Spectrum_{idx+1}")
+            precursor_mz = getattr(spec, "precursor_mz", None)
+
+        if peaks_raw is None:
+            continue
+
+        cleaned_peaks = []
+        for p in peaks_raw:
+            try:
+                mz = float(p[0])
+                intensity = float(p[1]) if not isinstance(p[1], str) else float(p[1].replace(';', ''))
+                cleaned_peaks.append([mz, intensity])
+            except Exception:
+                continue
+
+        if not cleaned_peaks:
+            continue
+
+        cleaned_peaks_arr = np.array(cleaned_peaks, dtype=np.float32)
+        cleaned_peaks_arr = ms_entropy.clean_spectrum(cleaned_peaks_arr)
+
+        query_dict = {
+            "precursor_mz": precursor_mz,
+            "peaks": cleaned_peaks_arr
+        }
+
+        # 已知库匹配
+        matched_smiles_or_bool = check_spectrum_similarity(
+            query_dict,
+            min_similarity=min_similarity
+        )
+        is_known_compound = bool(matched_smiles_or_bool)
+        matched_smiles = matched_smiles_or_bool if isinstance(matched_smiles_or_bool, str) else ""
+
+        vec = peaks_to_vector(cleaned_peaks_arr)
+        vectors.append(vec)
+        valid_indices.append(idx)
+
+        results_detail.append({
+            "index": idx,
+            "name": spec_name,
+            "num_cleaned_peaks": len(cleaned_peaks_arr),
+            "precursor_mz": precursor_mz,
+            "is_matched": is_known_compound,
+            "matched_smiles": matched_smiles,
+            "risk_probability": 0.0,
+            "is_high_risk": False
+        })
+
+    # 2. 批量 PyTorch 风险概率推断
+    if vectors:
+        vecs_arr = np.array(vectors, dtype=np.float32)
+        vecs_norm = preprocess_spectra(vecs_arr)
+        model = get_classifier_model()
+        
+        # 分批推断避免 GPU/CPU 内存峰值
+        all_probs = []
+        with torch.no_grad():
+            for i in range(0, len(vecs_norm), batch_size):
+                batch_tensor = torch.tensor(vecs_norm[i:i+batch_size], dtype=torch.float32)
+                logits = model(batch_tensor)
+                probs = torch.sigmoid(logits).cpu().numpy().tolist()
+                if isinstance(probs, float):
+                    probs = [probs]
+                all_probs.extend(probs)
+
+        for detail_item, prob in zip(results_detail, all_probs):
+            detail_item["risk_probability"] = round(prob, 4)
+            detail_item["is_high_risk"] = prob >= 0.5
+
+    # 3. 统计汇总分析
+    matched_count = sum(1 for item in results_detail if item["is_matched"])
+    high_risk_count = sum(1 for item in results_detail if item["is_high_risk"])
+    low_risk_count = len(results_detail) - high_risk_count
+
+    probs_arr = np.array([item["risk_probability"] for item in results_detail]) if results_detail else np.array([0.0])
+
+    stats = {
+        "filename": filename,
+        "total_parsed_spectra": len(results_detail),
+        "total_file_spectra": total_count,
+        "known_library_matches": {
+            "matched_count": matched_count,
+            "unmatched_count": len(results_detail) - matched_count,
+            "match_rate_percentage": f"{(matched_count / len(results_detail) * 100):.2f}%" if results_detail else "0.00%",
+            "min_similarity_threshold": min_similarity
+        },
+        "model_risk_inference": {
+            "high_risk_count": high_risk_count,
+            "low_risk_count": low_risk_count,
+            "high_risk_percentage": f"{(high_risk_count / len(results_detail) * 100):.2f}%" if results_detail else "0.00%",
+            "low_risk_percentage": f"{(low_risk_count / len(results_detail) * 100):.2f}%" if results_detail else "0.00%",
+            "mean_risk_probability": round(float(np.mean(probs_arr)), 4),
+            "median_risk_probability": round(float(np.median(probs_arr)), 4),
+            "std_risk_probability": round(float(np.std(probs_arr)), 4),
+            "percentiles": {
+                "p25": round(float(np.percentile(probs_arr, 25)), 4),
+                "p50": round(float(np.percentile(probs_arr, 50)), 4),
+                "p75": round(float(np.percentile(probs_arr, 75)), 4),
+                "p90": round(float(np.percentile(probs_arr, 90)), 4),
+                "p95": round(float(np.percentile(probs_arr, 95)), 4)
+            }
+        },
+        "details": results_detail
+    }
+
+    return stats
+
