@@ -1,7 +1,10 @@
+import os
+import shutil
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from pathlib import Path
+from datetime import datetime
 from simclr_pretrain.lib.models import SpectrumEncoder
 
 class BinaryClassifier(nn.Module):
@@ -84,3 +87,21 @@ def load_pretrained_encoder(encoder_path, input_dim=561, hidden_dim=256, device=
         print(f"    [WARN] 忽略多余键: {unexpected_keys[:3]}...")
         
     return encoder
+
+
+def save_model_checkpoint(obj, target_dir):
+    """
+    保存模型权重至全新时间戳文件 (如 binary_classifier_20260722_210500.pt)
+    不试图覆盖已占用的固化文件名，彻底规避文件锁定冲突。
+    """
+    target_dir = Path(target_dir)
+    if target_dir.is_file() or target_dir.suffix == '.pt':
+        target_dir = target_dir.parent
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_path = target_dir / f"binary_classifier_{timestamp}.pt"
+    
+    torch.save(obj, str(save_path))
+    print(f"  [OK] 模型权重已保存至全新时间戳文件: {save_path}")
+    return save_path

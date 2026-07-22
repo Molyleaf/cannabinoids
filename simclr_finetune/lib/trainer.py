@@ -15,9 +15,13 @@ def safe_auc(labels, probs):
         return 0.5
 
 
-def train_binary_classifier(model, train_loader, val_loader, device='cuda', epochs=100, lr=0.001, patience=15, max_grad_norm=1.0):
+def train_binary_classifier(
+    model, train_loader, val_loader, 
+    device='cuda', epochs=100, lr=0.001, patience=15, 
+    max_grad_norm=1.0, pos_weight=1.0
+):
     """
-    运行二分类器微调训练 (支持 CUDA、AMP 混合精度与梯度裁剪)
+    运行二分类器微调训练 (支持 CUDA、AMP 混合精度、正样本加权与梯度裁剪)
     """
     device = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
     print(f"训练执行设备: {device}")
@@ -33,7 +37,14 @@ def train_binary_classifier(model, train_loader, val_loader, device='cuda', epoc
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=5, min_lr=1e-6
     )
-    criterion = nn.BCEWithLogitsLoss()
+    
+    # 支持 positive class weighting 降低漏检率 (False Negative)
+    if pos_weight != 1.0:
+        pw_tensor = torch.tensor([pos_weight], device=device, dtype=torch.float32)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pw_tensor)
+        print(f"  [INFO] 启用正样本损失加权 pos_weight = {pos_weight:.2f}")
+    else:
+        criterion = nn.BCEWithLogitsLoss()
     
     best_val_loss = float('inf')
     best_model_state = None

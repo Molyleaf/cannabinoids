@@ -1,4 +1,8 @@
-from simclr_finetune.lib.models import BinaryClassifier, load_pretrained_encoder
+from simclr_finetune.lib.models import (
+    BinaryClassifier,
+    load_pretrained_encoder,
+    save_model_checkpoint
+)
 from simclr_finetune.lib.dataset import (
     parse_msp_with_smiles,
     peaks_to_vector,
@@ -18,6 +22,7 @@ from simclr_finetune.lib.evaluation import (
 __all__ = [
     'BinaryClassifier',
     'load_pretrained_encoder',
+    'save_model_checkpoint',
     'parse_msp_with_smiles',
     'peaks_to_vector',
     'preprocess_spectra',
