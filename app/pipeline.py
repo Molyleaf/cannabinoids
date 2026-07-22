@@ -16,21 +16,21 @@ class SpectrumEncoder(nn.Module):
         super().__init__()
         self.conv_block = nn.Sequential(
             nn.Conv1d(1, 64, kernel_size=7, padding=3),
-            nn.BatchNorm1d(64),
+            nn.GroupNorm(8, 64),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(2),
             nn.Conv1d(64, 128, kernel_size=5, padding=2),
-            nn.BatchNorm1d(128),
+            nn.GroupNorm(8, 128),
             nn.ReLU(inplace=True),
             nn.MaxPool1d(2),
             nn.Conv1d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm1d(256),
+            nn.GroupNorm(8, 256),
             nn.ReLU(inplace=True),
             nn.AdaptiveAvgPool1d(1)
         )
         self.fc = nn.Sequential(
             nn.Linear(256, hidden_dim),
-            nn.BatchNorm1d(hidden_dim)
+            nn.LayerNorm(hidden_dim)
         )
     
     def forward(self, x):
@@ -38,7 +38,8 @@ class SpectrumEncoder(nn.Module):
             x = x.unsqueeze(1)
         h = self.conv_block(x).squeeze(-1)
         embed = self.fc(h)
-        return F.normalize(embed, p=2, dim=1)
+        norm = torch.norm(embed, p=2, dim=1, keepdim=True)
+        return embed / torch.clamp(norm, min=1e-3)
 
 
 class BinaryClassifier(nn.Module):
@@ -51,11 +52,11 @@ class BinaryClassifier(nn.Module):
         
         self.classifier = nn.Sequential(
             nn.Linear(input_dim, 128),
-            nn.BatchNorm1d(128),
+            nn.LayerNorm(128),
             nn.ReLU(inplace=True),
             nn.Dropout(0.3),
             nn.Linear(128, 64),
-            nn.BatchNorm1d(64),
+            nn.LayerNorm(64),
             nn.ReLU(inplace=True),
             nn.Dropout(0.2),
             nn.Linear(64, 1)
@@ -78,7 +79,7 @@ def get_classifier_model(safetensors_path: str = None) -> BinaryClassifier:
         if safetensors_path is None:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             safetensors_path = os.path.join(
-                current_dir, "models", "binary_classifier_weights_20260716_164027.safetensors"
+                current_dir, "models", "binary_classifier_weights_20260722_172808.safetensors"
             )
             
         if not os.path.exists(safetensors_path):

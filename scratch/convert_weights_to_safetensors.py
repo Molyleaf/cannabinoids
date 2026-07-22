@@ -36,7 +36,7 @@ def convert_pt_to_safetensors(pt_path: str, safetensors_path: str):
 
 if __name__ == "__main__":
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    pt_path = os.path.join(project_root, "app", "models", "binary_classifier_weights_20260716_164027.pt")
+    pt_path = os.path.join(project_root, "simclr_finetune", "binary_classifier_weights_20260716_164027.pt")
     safetensors_path = os.path.join(project_root, "app", "models", "binary_classifier_weights_20260716_164027.safetensors")
     
     convert_pt_to_safetensors(pt_path, safetensors_path)
