@@ -145,10 +145,7 @@ def train_binary_classifier(
         
         if avg_val_loss < best_val_loss - 1e-4:
             best_val_loss = avg_val_loss
-            if getattr(model, 'freeze_encoder', False):
-                best_classifier_state = {k: v.cpu().clone() for k, v in model.classifier.state_dict().items()}
-            else:
-                best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            best_model_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
             patience_counter = 0
         else:
             patience_counter += 1
@@ -156,13 +153,12 @@ def train_binary_classifier(
                 print(f"\n触发早停机制，停止于 epoch {epoch}", flush=True)
                 break
     
-    if getattr(model, 'freeze_encoder', False) and best_classifier_state is not None:
-        model.classifier.load_state_dict(best_classifier_state)
-    elif best_model_state is not None:
-        model.load_state_dict(best_model_state)
+    if best_model_state is not None:
+        device_state = {k: v.to(device) for k, v in best_model_state.items()}
+        model.load_state_dict(device_state)
         
     model.to(device)
-    print(f"  [OK] 最佳权重已恢复 (最佳 Val Loss: {best_val_loss:.4f})", flush=True)
+    print(f"  [OK] 最佳模型权重已恢复 (最佳 Val Loss: {best_val_loss:.4f})", flush=True)
     
     history = {
         'train_loss': train_losses,

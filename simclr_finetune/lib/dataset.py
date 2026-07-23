@@ -168,7 +168,8 @@ def prepare_finetune_dataset(
     val_sample_names = sample_names_all[val_idx]
     test_sample_names = sample_names_all[test_idx]
     
-    pin_mem = use_cuda and torch.cuda.is_available()
+    # 在 Windows 上使用 CPU TensorDataset 时禁用 pin_memory，防止无声 Access Violation 崩溃
+    pin_mem = False
     
     train_dataset = TensorDataset(torch.tensor(X[train_idx]), torch.tensor(y[train_idx]))
     val_dataset = TensorDataset(torch.tensor(X[val_idx]), torch.tensor(y[val_idx]))
