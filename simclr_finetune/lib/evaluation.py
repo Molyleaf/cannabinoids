@@ -35,20 +35,16 @@ def evaluate_and_record_predictions(model, data_loader, sample_names=None, devic
     
     all_probs, all_labels, all_preds = [], [], []
     
-    try:
-        with torch.no_grad():
-            for batch_spec, batch_labels in data_loader:
-                batch_spec = batch_spec.to(dev, non_blocking=True)
-                batch_labels = batch_labels.to(dev, non_blocking=True)
-                logits = model(batch_spec)
-                probs = torch.sigmoid(logits)
-                
-                all_probs.extend(probs.cpu().numpy().ravel())
-                all_labels.extend(batch_labels.cpu().numpy().ravel())
-                all_preds.extend((probs >= threshold).float().cpu().numpy().ravel())
-    except Exception as e:
-        print(f"\n  [ERROR] 评估过程发生异常: {e}", flush=True)
-        raise e
+    with torch.no_grad():
+        for batch_spec, batch_labels in data_loader:
+            batch_spec = batch_spec.to(dev)
+            batch_labels = batch_labels.to(dev)
+            logits = model(batch_spec)
+            probs = torch.sigmoid(logits)
+            
+            all_probs.extend(probs.cpu().numpy().ravel())
+            all_labels.extend(batch_labels.cpu().numpy().ravel())
+            all_preds.extend((probs >= threshold).float().cpu().numpy().ravel())
             
     all_probs = np.array(all_probs)
     all_labels = np.array(all_labels)

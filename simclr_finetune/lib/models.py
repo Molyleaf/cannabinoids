@@ -34,10 +34,6 @@ class BinaryClassifier(nn.Module):
         if x.dim() == 1:
             x = x.unsqueeze(0)
             
-        param = next(self.classifier.parameters(), None)
-        if param is not None and x.device != param.device:
-            x = x.to(param.device)
-            
         if self.freeze_encoder:
             with torch.no_grad():
                 embed = self.encoder(x)

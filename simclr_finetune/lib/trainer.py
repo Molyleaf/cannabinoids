@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 import numpy as np
@@ -62,8 +63,8 @@ def train_binary_classifier(
         train_probs_all, train_labels_all = [], []
         
         for batch_spec, batch_labels in train_loader:
-            batch_spec = batch_spec.to(device, non_blocking=True)
-            batch_labels = batch_labels.to(device, non_blocking=True)
+            batch_spec = batch_spec.to(device)
+            batch_labels = batch_labels.to(device)
             
             optimizer.zero_grad(set_to_none=True)
             
@@ -109,8 +110,8 @@ def train_binary_classifier(
         
         with torch.no_grad():
             for batch_spec, batch_labels in val_loader:
-                batch_spec = batch_spec.to(device, non_blocking=True)
-                batch_labels = batch_labels.to(device, non_blocking=True)
+                batch_spec = batch_spec.to(device)
+                batch_labels = batch_labels.to(device)
                 
                 if use_amp:
                     with torch.amp.autocast('cuda'):
@@ -145,7 +146,6 @@ def train_binary_classifier(
         
         if avg_val_loss < best_val_loss - 1e-4:
             best_val_loss = avg_val_loss
-            import copy
             best_classifier_state = copy.deepcopy(model.classifier.state_dict())
             patience_counter = 0
         else:
