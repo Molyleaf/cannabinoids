@@ -1,9 +1,8 @@
-import json
 import torch
 import numpy as np
 import pandas as pd
 import matplotlib
-matplotlib.use('Agg')  # 强制使用非交互式后端，防止 GUI 线程卡死
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -19,17 +18,16 @@ def safe_auc(labels, probs):
     if len(np.unique(labels)) < 2:
         return 0.5
     try:
-        return roc_auc_score(labels, probs)
+        return float(roc_auc_score(labels, probs))
     except Exception:
         return 0.5
 
 
-def evaluate_and_record_predictions(model, data_loader, sample_names=None, device='cpu', threshold=0.5):
+def evaluate_and_record_predictions(model, data_loader, sample_names=None, device='cuda', threshold=0.5):
     """
-    运行谱图级别的评估逻辑（强制定向至 CPU 运行，彻底免疫 GPU 驱动与 CUDA 上下文越界风险）。
-    要求 data_loader 的 shuffle=False，这样样本顺序与 dataset 及 sample_names 一致。
+    标准的 PyTorch 评估流程：计算预测概率与评估指标
     """
-    dev = torch.device('cpu')
+    dev = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
     model.eval()
     model.to(dev)
     
@@ -42,9 +40,9 @@ def evaluate_and_record_predictions(model, data_loader, sample_names=None, devic
             logits = model(batch_spec)
             probs = torch.sigmoid(logits)
             
-            all_probs.extend(probs.numpy().ravel())
-            all_labels.extend(batch_labels.numpy().ravel())
-            all_preds.extend((probs >= threshold).float().numpy().ravel())
+            all_probs.extend(probs.cpu().numpy().ravel())
+            all_labels.extend(batch_labels.cpu().numpy().ravel())
+            all_preds.extend((probs >= threshold).float().cpu().numpy().ravel())
             
     all_probs = np.array(all_probs)
     all_labels = np.array(all_labels)
@@ -60,8 +58,6 @@ def evaluate_and_record_predictions(model, data_loader, sample_names=None, devic
     df_pred = None
     if sample_names is not None:
         sample_names_arr = np.asarray(sample_names)
-        if len(sample_names_arr) != len(all_labels):
-            print(f"  [WARN] sample_names 长度 ({len(sample_names_arr)}) 与评估样本数 ({len(all_labels)}) 不一致!")
         df_pred = pd.DataFrame({
             'Sample_Name': sample_names_arr[:len(all_labels)],
             'True_Label': all_labels,
@@ -89,12 +85,11 @@ def evaluate_and_record_predictions(model, data_loader, sample_names=None, devic
 
 
 def evaluate_model(model, data_loader, device='cuda', threshold=0.5, sample_names=None):
-    """运行谱图级别的评估逻辑 (支持自定义分类概率阈值 threshold)"""
     return evaluate_and_record_predictions(model, data_loader, sample_names=sample_names, device=device, threshold=threshold)
 
 
 def evaluate_positive_per_smiles(test_indices, smiles_all, labels_all, probs, preds, threshold=0.5):
-    """仅对阳性样本按 SMILES 聚合评估化合物级别的识别率"""
+    """按 SMILES 聚合评估化合物级别的识别率"""
     test_labels = labels_all[test_indices]
     test_smiles = smiles_all[test_indices]
     
@@ -156,11 +151,10 @@ def export_results_to_excel(
     history, model, train_results, val_results, test_results,
     smiles_results, meta, output_dir
 ):
-    """导出包含多 Sheet 详细分类预测及指标的 Excel 文件"""
+    """导出结果至 Excel/CSV"""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # 1. 训练历史
     max_len = max(len(history['train_loss']), len(history['val_loss']))
     df_history = pd.DataFrame({
         'Epoch': list(range(1, max_len + 1)),
@@ -172,7 +166,6 @@ def export_results_to_excel(
         'Val_AUC': history['val_auc'] + [np.nan] * (max_len - len(history['val_auc'])),
     })
     
-    # 2. 汇总指标
     df_summary = pd.DataFrame({
         'Dataset': ['Train', 'Validation', 'Test'],
         'Samples': [train_results['n_samples'], val_results['n_samples'], test_results['n_samples']],
@@ -189,7 +182,6 @@ def export_results_to_excel(
         'TP': [train_results['confusion_matrix'][1,1], val_results['confusion_matrix'][1,1], test_results['confusion_matrix'][1,1]],
     })
     
-    # 获取预测结果 DataFrame
     def get_pred_df(res, fallback_idx, fallback_key):
         if res.get('df_pred') is not None:
             return res['df_pred']
@@ -213,7 +205,6 @@ def export_results_to_excel(
     df_val = get_pred_df(val_results, meta['val_idx'], 'val_sample_names')
     df_test = get_pred_df(test_results, meta['test_idx'], 'test_sample_names')
     
-    # 错误预测汇总
     err_train = df_train[~df_train['Correct']].assign(Dataset='Train')
     err_val = df_val[~df_val['Correct']].assign(Dataset='Validation')
     err_test = df_test[~df_test['Correct']].assign(Dataset='Test')
@@ -224,7 +215,6 @@ def export_results_to_excel(
             lambda r: 'False Positive (FP)' if r['True_Label'] == 0 and r['Pred_Label'] == 1 else 'False Negative (FN)', axis=1
         )
     
-    # SMILES 级别
     if smiles_results is not None:
         df_smiles = pd.DataFrame({
             'SMILES': smiles_results['smiles_names'],
@@ -251,11 +241,8 @@ def export_results_to_excel(
             df_smiles.to_excel(writer, sheet_name='SMILES_Level_Results', index=False)
         print(f"  [OK] 结果 Excel 已保存: {excel_path}", flush=True)
         return excel_path
-    except (ImportError, ModuleNotFoundError, ValueError):
-        if output_dir.name.startswith("results_") or output_dir.name.startswith("run_"):
-            csv_dir = output_dir
-        else:
-            csv_dir = output_dir / f"results_{timestamp}"
+    except Exception as e:
+        csv_dir = output_dir / f"results_{timestamp}"
         csv_dir.mkdir(parents=True, exist_ok=True)
         df_history.to_csv(csv_dir / 'training_history.csv', index=False)
         df_summary.to_csv(csv_dir / 'summary_metrics.csv', index=False)
@@ -264,7 +251,7 @@ def export_results_to_excel(
         df_test.to_csv(csv_dir / 'test_predictions.csv', index=False)
         all_errors.to_csv(csv_dir / 'error_predictions.csv', index=False)
         df_smiles.to_csv(csv_dir / 'smiles_level_results.csv', index=False)
-        print(f"  [WARN] openpyxl 未安装，已自动降级保存结果 CSV 至: {csv_dir}", flush=True)
+        print(f"  [WARN] 已自动保存结果 CSV 至: {csv_dir}", flush=True)
         return csv_dir
 
 
@@ -275,7 +262,6 @@ def plot_comprehensive_results(history, train_results, val_results, test_results
     
     fig = plt.figure(figsize=(18, 10))
     
-    # 1. Loss 曲线
     ax1 = plt.subplot(2, 3, 1)
     ax1.plot(history['train_loss'], label='Train Loss', color='blue', lw=2)
     ax1.plot(history['val_loss'], label='Val Loss', color='orange', lw=2)
@@ -285,7 +271,6 @@ def plot_comprehensive_results(history, train_results, val_results, test_results
     ax1.legend()
     ax1.grid(True, alpha=0.3)
     
-    # 2. Acc 曲线
     ax2 = plt.subplot(2, 3, 2)
     ax2.plot(history['train_acc'], label='Train Acc', color='blue', lw=2)
     ax2.plot(history['val_acc'], label='Val Acc', color='orange', lw=2)
@@ -295,7 +280,6 @@ def plot_comprehensive_results(history, train_results, val_results, test_results
     ax2.legend()
     ax2.grid(True, alpha=0.3)
     
-    # 3. 性能柱状图对比
     ax3 = plt.subplot(2, 3, 3)
     metrics = ['Accuracy', 'Precision', 'Recall', 'F1', 'AUC']
     t_m = [train_results['accuracy'], train_results['precision'], train_results['recall'], train_results['f1'], train_results['auc']]
@@ -314,7 +298,6 @@ def plot_comprehensive_results(history, train_results, val_results, test_results
     ax3.legend()
     ax3.grid(True, alpha=0.3, axis='y')
     
-    # 4. ROC 训练集
     ax4 = plt.subplot(2, 3, 4)
     fpr_tr, tpr_tr, _ = roc_curve(train_results['labels'], train_results['probs'])
     ax4.plot(fpr_tr, tpr_tr, color='blue', lw=2, label=f'Train AUC={train_results["auc"]:.4f}')
@@ -323,7 +306,6 @@ def plot_comprehensive_results(history, train_results, val_results, test_results
     ax4.legend(loc='lower right')
     ax4.grid(True, alpha=0.3)
     
-    # 5. ROC 验证集
     ax5 = plt.subplot(2, 3, 5)
     fpr_v, tpr_v, _ = roc_curve(val_results['labels'], val_results['probs'])
     ax5.plot(fpr_v, tpr_v, color='orange', lw=2, label=f'Val AUC={val_results["auc"]:.4f}')
@@ -332,7 +314,6 @@ def plot_comprehensive_results(history, train_results, val_results, test_results
     ax5.legend(loc='lower right')
     ax5.grid(True, alpha=0.3)
     
-    # 6. ROC 测试集
     ax6 = plt.subplot(2, 3, 6)
     fpr_te, tpr_te, _ = roc_curve(test_results['labels'], test_results['probs'])
     ax6.plot(fpr_te, tpr_te, color='green', lw=2, label=f'Test AUC={test_results["auc"]:.4f}')
@@ -344,9 +325,8 @@ def plot_comprehensive_results(history, train_results, val_results, test_results
     plt.tight_layout()
     fig_path = output_dir / 'comprehensive_results.png'
     plt.savefig(str(fig_path), dpi=300, bbox_inches='tight')
-    plt.close()
+    plt.close('all')
     
-    # 单独的 ROC 曲线对比图
     fig_roc, ax_roc = plt.subplots(figsize=(8, 6.5))
     ax_roc.plot(fpr_tr, tpr_tr, color='#1f77b4', lw=2.5, label=f'Train (AUC = {train_results["auc"]:.4f})')
     ax_roc.plot(fpr_v, tpr_v, color='#ff7f0e', lw=2.5, label=f'Val (AUC = {val_results["auc"]:.4f})')
@@ -360,8 +340,7 @@ def plot_comprehensive_results(history, train_results, val_results, test_results
     
     roc_compare_path = output_dir / 'roc_curves_comparison.png'
     plt.savefig(str(roc_compare_path), dpi=300, bbox_inches='tight')
-    plt.close()
-    
+    plt.close('all')
     print(f"  [OK] 评估图表已保存至: {output_dir}", flush=True)
 
 
