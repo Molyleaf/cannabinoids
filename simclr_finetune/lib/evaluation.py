@@ -26,6 +26,7 @@ def safe_auc(labels, probs):
 
 
 def evaluate_and_record_predictions(model, data_loader, sample_names=None, device='cuda', threshold=0.5):
+    print("  [DEBUG] Entering evaluate_and_record_predictions", flush=True)
     """
     标准的 PyTorch 评估流程：计算预测概率与评估指标
     """
@@ -35,6 +36,7 @@ def evaluate_and_record_predictions(model, data_loader, sample_names=None, devic
     
     all_probs, all_labels, all_preds = [], [], []
     
+    print("  [DEBUG] Starting forward pass loop", flush=True)
     with torch.no_grad():
         for batch_spec, batch_labels in data_loader:
             batch_spec = batch_spec.to(dev)
@@ -50,6 +52,7 @@ def evaluate_and_record_predictions(model, data_loader, sample_names=None, devic
     all_labels = np.array(all_labels)
     all_preds = np.array(all_preds)
     
+    print("  [DEBUG] Finished forward pass loop, calculating metrics", flush=True)
     acc = accuracy_score(all_labels, all_preds)
     prec = precision_score(all_labels, all_preds, zero_division=0)
     rec = recall_score(all_labels, all_preds, zero_division=0)
@@ -58,16 +61,8 @@ def evaluate_and_record_predictions(model, data_loader, sample_names=None, devic
     cm = confusion_matrix(all_labels, all_preds)
     
     df_pred = None
-    if sample_names is not None:
-        sample_names_arr = np.asarray(sample_names)
-        df_pred = pd.DataFrame({
-            'Sample_Name': sample_names_arr[:len(all_labels)],
-            'True_Label': all_labels,
-            'Pred_Prob': all_probs,
-            'Pred_Label': all_preds,
-            'Correct': all_labels == all_preds,
-        })
     
+    print("  [DEBUG] Returning from evaluate_and_record_predictions", flush=True)
     return {
         'threshold': float(threshold),
         'accuracy': float(acc),
@@ -134,6 +129,7 @@ def evaluate_positive_per_smiles(test_indices, smiles_all, labels_all, probs, pr
     print(f"  正确识别: {n_correct}/{n_total} 种化合物 ({acc:.2%})")
     print(f"  漏检:     {n_total - n_correct}/{n_total} 种化合物")
     
+    print("  [DEBUG] Returning from evaluate_and_record_predictions", flush=True)
     return {
         'threshold': float(threshold),
         'accuracy': float(acc),
