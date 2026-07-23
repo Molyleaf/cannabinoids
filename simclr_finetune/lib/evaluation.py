@@ -249,7 +249,10 @@ def export_results_to_excel(
         print(f"  [OK] 结果 Excel 已保存: {excel_path}")
         return excel_path
     except (ImportError, ModuleNotFoundError, ValueError):
-        csv_dir = output_dir / f"results_{timestamp}"
+        if output_dir.name.startswith("results_") or output_dir.name.startswith("run_"):
+            csv_dir = output_dir
+        else:
+            csv_dir = output_dir / f"results_{timestamp}"
         csv_dir.mkdir(parents=True, exist_ok=True)
         df_history.to_csv(csv_dir / 'training_history.csv', index=False)
         df_summary.to_csv(csv_dir / 'summary_metrics.csv', index=False)
