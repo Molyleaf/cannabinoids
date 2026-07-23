@@ -32,19 +32,29 @@ def evaluate_and_record_predictions(model, data_loader, sample_names=None, devic
     dev = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
     model.eval()
     model.to(dev)
+    if dev.type == 'cuda':
+        torch.cuda.synchronize()
     
     all_probs, all_labels, all_preds = [], [], []
+    use_amp = (dev.type == 'cuda')
     
     with torch.no_grad():
         for batch_spec, batch_labels in data_loader:
             batch_spec = batch_spec.to(dev)
             batch_labels = batch_labels.to(dev)
-            logits = model(batch_spec)
+            if use_amp:
+                with torch.amp.autocast('cuda'):
+                    logits = model(batch_spec)
+            else:
+                logits = model(batch_spec)
             probs = torch.sigmoid(logits)
             
             all_probs.extend(probs.cpu().numpy().ravel())
             all_labels.extend(batch_labels.cpu().numpy().ravel())
             all_preds.extend((probs >= threshold).float().cpu().numpy().ravel())
+            
+    if dev.type == 'cuda':
+        torch.cuda.synchronize()
             
     all_probs = np.array(all_probs)
     all_labels = np.array(all_labels)

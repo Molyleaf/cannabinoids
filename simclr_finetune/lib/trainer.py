@@ -169,11 +169,13 @@ def train_binary_classifier(
         'val_auc': val_aucs,
     }
     
-    # 显式清理优化器与 AMP Scaler 显存引用，防止函数返回时垃圾回收引发 CUDA SegFault
+    # 显式等待 CUDA 异步任务完成并清理显存，防止函数返回时垃圾回收引发 CUDA Access Violation 崩溃
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        
     del optimizer, scheduler
     if scaler is not None:
         del scaler
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
         
     return model, history
