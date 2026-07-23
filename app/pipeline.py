@@ -246,8 +246,8 @@ def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75,
     is_known_compound = bool(matched_smiles_or_bool)
     matched_smiles = matched_smiles_or_bool if isinstance(matched_smiles_or_bool, str) else ""
 
-    # 模型深度学习风险推断 (使用原始离子强度的 peaks_raw 进行 1D 特征向量转换)
-    vec = peaks_to_vector(peaks_raw)
+    # 模型深度学习风险推断 (使用经 ms_entropy.clean_spectrum 滤噪清洗后的质谱峰进行 1D 特征向量转换)
+    vec = peaks_to_vector(cleaned_peaks_arr)
     vec_norm = preprocess_spectra(vec)
     x_tensor = torch.tensor(vec_norm, dtype=torch.float32)
 
@@ -319,8 +319,8 @@ def run_pipeline_batch(file_bytes: bytes, filename: str, min_similarity: float =
         is_known_compound = bool(matched_smiles_or_bool)
         matched_smiles = matched_smiles_or_bool if isinstance(matched_smiles_or_bool, str) else ""
 
-        # 使用原始相对强度的 peaks_raw 进行 1D 特征向量转换
-        vec = peaks_to_vector(peaks_raw)
+        # 使用经 ms_entropy.clean_spectrum 滤噪清洗后的质谱峰进行 1D 特征向量转换
+        vec = peaks_to_vector(cleaned_peaks_arr)
         vectors.append(vec)
 
         results_detail.append({

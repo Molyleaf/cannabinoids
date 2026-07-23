@@ -1,14 +1,15 @@
 import torch
 import numpy as np
+import ms_entropy
 from pathlib import Path
 from collections import Counter
 from torch.utils.data import DataLoader, TensorDataset
 
 def parse_msp_with_smiles(msp_file, min_peaks=5):
-    """解析 MSP 文件，返回包含 SMILES 的化合物字典列表"""
+    """解析 MSP 文件，返回包含 SMILES 的化合物字典列表 (鲁棒状态机模式)"""
     msp_file = Path(msp_file)
     print(f"  正在解析 MSP 文件: {msp_file.name}...")
-    with open(msp_file, 'r', encoding='utf-8') as f:
+    with open(msp_file, 'r', encoding='utf-8', errors='ignore') as f:
         lines = f.readlines()
     
     compounds = []
@@ -16,32 +17,46 @@ def parse_msp_with_smiles(msp_file, min_peaks=5):
     in_peaks = False
     
     for line in lines:
-        line = line.strip()
-        if line.startswith('Name:'):
+        stripped = line.strip()
+        if not stripped:
+            continue
+            
+        lower = stripped.lower()
+        if lower.startswith('name:'):
             if current_comp is not None and 'peaks' in current_comp:
                 if len(current_comp['peaks']) >= min_peaks:
                     compounds.append(current_comp)
             current_comp = {
-                'name': line.split(':', 1)[1].strip(),
+                'name': stripped.split(':', 1)[1].strip() if ':' in stripped else stripped,
                 'smiles': '',
                 'peaks': []
             }
             in_peaks = False
-        elif line.startswith('SMILES:'):
-            if current_comp is not None:
-                current_comp['smiles'] = line.split(':', 1)[1].strip()
-        elif line.startswith('Num peaks:'):
-            in_peaks = True
-        elif in_peaks and line:
-            parts = line.replace(';', '').replace('\t', ' ').split()
-            if len(parts) >= 2:
-                try:
-                    mz = float(parts[0])
-                    intensity = float(parts[1])
-                    if mz > 0 and intensity > 0:
-                        current_comp['peaks'].append((mz, intensity))
-                except ValueError:
-                    in_peaks = False
+        elif current_comp is not None:
+            if lower.startswith('smiles:'):
+                current_comp['smiles'] = stripped.split(':', 1)[1].strip()
+            elif lower.startswith('num peaks:') or lower.startswith('num_peaks:'):
+                in_peaks = True
+            else:
+                # 尝试解析峰数据 (支持分号隔开的多峰行，或直接 mz intensity 格式)
+                sub_items = stripped.split(';')
+                has_valid_peak = False
+                for sub in sub_items:
+                    sub = sub.strip()
+                    if not sub:
+                        continue
+                    parts = sub.replace('\t', ' ').split()
+                    if len(parts) >= 2:
+                        try:
+                            mz = float(parts[0])
+                            intensity = float(parts[1])
+                            if mz > 0 and intensity > 0:
+                                current_comp['peaks'].append((mz, intensity))
+                                has_valid_peak = True
+                        except ValueError:
+                            pass
+                if has_valid_peak:
+                    in_peaks = True
     
     if current_comp is not None and 'peaks' in current_comp:
         if len(current_comp['peaks']) >= min_peaks:
@@ -49,6 +64,7 @@ def parse_msp_with_smiles(msp_file, min_peaks=5):
     
     print(f"  [OK] 成功解析出 {len(compounds)} 个化合物谱图")
     return compounds
+
 
 
 def peaks_to_vector(peaks, mz_min=40, mz_max=600):
@@ -142,9 +158,13 @@ def prepare_finetune_dataset(
         neg_compounds.extend(removed_comps)
         print(f"  [OK] 已将 {len(removed_comps)} 个 '.alpha.-pbp' 样本从阳性移至阴性集")
         
-    pos_spectra = np.array([peaks_to_vector(c['peaks']) for c in pos_compounds])
+    def clean_peaks(peaks):
+        arr = np.array(peaks, dtype=np.float32)
+        return ms_entropy.clean_spectrum(arr)
+
+    pos_spectra = np.array([peaks_to_vector(clean_peaks(c['peaks'])) for c in pos_compounds])
     pos_smiles = np.array([c['smiles'] if c['smiles'] else c['name'] for c in pos_compounds])
-    neg_spectra = np.array([peaks_to_vector(c['peaks']) for c in neg_compounds])
+    neg_spectra = np.array([peaks_to_vector(clean_peaks(c['peaks'])) for c in neg_compounds])
     
     X_pos = preprocess_spectra(pos_spectra)
     X_neg = preprocess_spectra(neg_spectra)
