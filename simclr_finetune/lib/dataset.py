@@ -161,6 +161,13 @@ def prepare_finetune_dataset(
         test_size=test_size, val_size=val_size, random_state=random_state
     )
     
+    # 生成所有样本的名称数组
+    sample_names_all = np.array([c['name'] for c in pos_compounds] + [c['name'] for c in neg_compounds])
+    
+    train_sample_names = sample_names_all[train_idx]
+    val_sample_names = sample_names_all[val_idx]
+    test_sample_names = sample_names_all[test_idx]
+    
     pin_mem = use_cuda and torch.cuda.is_available()
     
     train_dataset = TensorDataset(torch.tensor(X[train_idx]), torch.tensor(y[train_idx]))
@@ -168,6 +175,7 @@ def prepare_finetune_dataset(
     test_dataset = TensorDataset(torch.tensor(X[test_idx]), torch.tensor(y[test_idx]))
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=pin_mem)
+    train_eval_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_mem)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_mem)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_mem)
     
@@ -175,11 +183,15 @@ def prepare_finetune_dataset(
         'X': X,
         'y': y,
         'smiles_all': smiles_all,
+        'sample_names_all': sample_names_all,
         'train_idx': train_idx,
         'val_idx': val_idx,
         'test_idx': test_idx,
+        'train_sample_names': train_sample_names,
+        'val_sample_names': val_sample_names,
+        'test_sample_names': test_sample_names,
         'pos_compounds': pos_compounds,
         'neg_compounds': neg_compounds
     }
     
-    return train_loader, val_loader, test_loader, meta
+    return train_loader, train_eval_loader, val_loader, test_loader, meta

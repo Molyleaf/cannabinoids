@@ -22,8 +22,11 @@ def safe_auc(labels, probs):
         return 0.5
 
 
-def evaluate_model(model, data_loader, device='cuda', threshold=0.5):
-    """运行谱图级别的评估逻辑 (支持自定义分类概率阈值 threshold)"""
+def evaluate_and_record_predictions(model, data_loader, sample_names=None, device='cuda', threshold=0.5):
+    """
+    运行谱图级别的评估逻辑，并按 DataLoader 顺序记录每个样本的预测结果。
+    要求 data_loader 的 shuffle=False，这样样本顺序与 dataset 及 sample_names 一致。
+    """
     dev = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
     model.eval()
     model.to(dev)
@@ -51,6 +54,19 @@ def evaluate_model(model, data_loader, device='cuda', threshold=0.5):
     auc = safe_auc(all_labels, all_probs)
     cm = confusion_matrix(all_labels, all_preds)
     
+    df_pred = None
+    if sample_names is not None:
+        sample_names_arr = np.asarray(sample_names)
+        if len(sample_names_arr) != len(all_labels):
+            print(f"  [WARN] sample_names 长度 ({len(sample_names_arr)}) 与评估样本数 ({len(all_labels)}) 不一致!")
+        df_pred = pd.DataFrame({
+            'Sample_Name': sample_names_arr[:len(all_labels)],
+            'True_Label': all_labels,
+            'Pred_Prob': all_probs,
+            'Pred_Label': all_preds,
+            'Correct': all_labels == all_preds,
+        })
+    
     return {
         'threshold': float(threshold),
         'accuracy': float(acc),
@@ -62,10 +78,16 @@ def evaluate_model(model, data_loader, device='cuda', threshold=0.5):
         'probs': all_probs,
         'labels': all_labels,
         'preds': all_preds,
+        'df_pred': df_pred,
         'n_samples': int(len(all_labels)),
         'n_neg': int((all_labels == 0).sum()),
         'n_pos': int((all_labels == 1).sum()),
     }
+
+
+def evaluate_model(model, data_loader, device='cuda', threshold=0.5, sample_names=None):
+    """运行谱图级别的评估逻辑 (支持自定义分类概率阈值 threshold)"""
+    return evaluate_and_record_predictions(model, data_loader, sample_names=sample_names, device=device, threshold=threshold)
 
 
 def evaluate_positive_per_smiles(test_indices, smiles_all, labels_all, probs, preds, threshold=0.5):
@@ -164,31 +186,29 @@ def export_results_to_excel(
         'TP': [train_results['confusion_matrix'][1,1], val_results['confusion_matrix'][1,1], test_results['confusion_matrix'][1,1]],
     })
     
-    # 样本名称
-    sample_names = []
-    compounds_pos = meta['pos_compounds']
-    compounds_neg = meta['neg_compounds']
-    total_samples = len(meta['X'])
-    for i in range(total_samples):
-        if i < len(compounds_pos):
-            sample_names.append(compounds_pos[i]['name'])
-        else:
-            sample_names.append(compounds_neg[i - len(compounds_pos)]['name'])
-    sample_names = np.array(sample_names)
-    
-    def build_pred_df(idx, res):
+    # 获取预测结果 DataFrame
+    def get_pred_df(res, fallback_idx, fallback_key):
+        if res.get('df_pred') is not None:
+            return res['df_pred']
+        sample_names = meta.get(fallback_key)
+        if sample_names is None:
+            sample_names_all = meta.get('sample_names_all')
+            if sample_names_all is None:
+                compounds_pos = meta['pos_compounds']
+                compounds_neg = meta['neg_compounds']
+                sample_names_all = np.array([c['name'] for c in compounds_pos] + [c['name'] for c in compounds_neg])
+            sample_names = sample_names_all[fallback_idx]
         return pd.DataFrame({
-            'Sample_Index': idx,
-            'Sample_Name': sample_names[idx],
+            'Sample_Name': sample_names,
             'True_Label': res['labels'],
             'Pred_Prob': res['probs'],
             'Pred_Label': res['preds'],
             'Correct': res['labels'] == res['preds'],
         })
         
-    df_train = build_pred_df(meta['train_idx'], train_results)
-    df_val = build_pred_df(meta['val_idx'], val_results)
-    df_test = build_pred_df(meta['test_idx'], test_results)
+    df_train = get_pred_df(train_results, meta['train_idx'], 'train_sample_names')
+    df_val = get_pred_df(val_results, meta['val_idx'], 'val_sample_names')
+    df_test = get_pred_df(test_results, meta['test_idx'], 'test_sample_names')
     
     # 错误预测汇总
     err_train = df_train[~df_train['Correct']].assign(Dataset='Train')

@@ -13,6 +13,7 @@ from simclr_finetune.lib.dataset import (
 from simclr_finetune.lib.trainer import train_binary_classifier
 from simclr_finetune.lib.evaluation import (
     evaluate_model,
+    evaluate_and_record_predictions,
     evaluate_positive_per_smiles,
     export_results_to_excel,
     plot_comprehensive_results,
@@ -30,6 +31,7 @@ __all__ = [
     'prepare_finetune_dataset',
     'train_binary_classifier',
     'evaluate_model',
+    'evaluate_and_record_predictions',
     'evaluate_positive_per_smiles',
     'export_results_to_excel',
     'plot_comprehensive_results',
