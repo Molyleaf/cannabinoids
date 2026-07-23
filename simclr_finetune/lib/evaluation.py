@@ -2,6 +2,8 @@ import json
 import torch
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # 强制使用非交互式后端，防止 GUI 线程卡死
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -40,7 +42,7 @@ def evaluate_and_record_predictions(model, data_loader, sample_names=None, devic
             probs = torch.sigmoid(logits)
             
             all_probs.extend(probs.cpu().numpy().ravel())
-            all_labels.extend(batch_labels.numpy().ravel())
+            all_labels.extend(batch_labels.cpu().numpy().ravel())
             all_preds.extend((probs >= threshold).float().cpu().numpy().ravel())
             
     all_probs = np.array(all_probs)
@@ -246,7 +248,7 @@ def export_results_to_excel(
             df_test.to_excel(writer, sheet_name='Test_Predictions', index=False)
             all_errors.to_excel(writer, sheet_name='Error_Predictions', index=False)
             df_smiles.to_excel(writer, sheet_name='SMILES_Level_Results', index=False)
-        print(f"  [OK] 结果 Excel 已保存: {excel_path}")
+        print(f"  [OK] 结果 Excel 已保存: {excel_path}", flush=True)
         return excel_path
     except (ImportError, ModuleNotFoundError, ValueError):
         if output_dir.name.startswith("results_") or output_dir.name.startswith("run_"):
@@ -261,7 +263,7 @@ def export_results_to_excel(
         df_test.to_csv(csv_dir / 'test_predictions.csv', index=False)
         all_errors.to_csv(csv_dir / 'error_predictions.csv', index=False)
         df_smiles.to_csv(csv_dir / 'smiles_level_results.csv', index=False)
-        print(f"  [WARN] openpyxl 未安装，已自动降级保存结果 CSV 至: {csv_dir}")
+        print(f"  [WARN] openpyxl 未安装，已自动降级保存结果 CSV 至: {csv_dir}", flush=True)
         return csv_dir
 
 
@@ -359,7 +361,7 @@ def plot_comprehensive_results(history, train_results, val_results, test_results
     plt.savefig(str(roc_compare_path), dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f"  [OK] 评估图表已保存至: {output_dir}")
+    print(f"  [OK] 评估图表已保存至: {output_dir}", flush=True)
 
 
 def plot_confusion_matrices(train_results, val_results, test_results, output_dir):
@@ -397,4 +399,4 @@ def plot_confusion_matrices(train_results, val_results, test_results, output_dir
     cm_path = output_dir / "confusion_matrix.png"
     plt.savefig(str(cm_path), dpi=300, bbox_inches='tight')
     plt.close('all')
-    print(f"  [OK] 混淆矩阵热力图已保存: {cm_path}")
+    print(f"  [OK] 混淆矩阵热力图已保存: {cm_path}", flush=True)
