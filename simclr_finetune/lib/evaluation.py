@@ -1,12 +1,11 @@
-import torch
-import numpy as np
-import pandas as pd
 import matplotlib
+import numpy as np
+import torch
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
-from datetime import datetime
 from collections import defaultdict
 from sklearn.metrics import (
     confusion_matrix, roc_curve, roc_auc_score,

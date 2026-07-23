@@ -1,8 +1,7 @@
 import os
 import sys
+
 import torch
-import numpy as np
-import pandas as pd
 
 PROJECT_ROOT = r"d:\UserFiles\Documents\PyCharm\cannabinoids"
 if PROJECT_ROOT not in sys.path:

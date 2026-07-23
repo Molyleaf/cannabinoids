@@ -3,26 +3,27 @@
 加载已训练好的模型: binary_classifier_20260716_155622.pt
 """
 
+import warnings
+from datetime import datetime
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, TensorDataset
-import numpy as np
-import matplotlib.pyplot as plt
-from pathlib import Path
-from collections import defaultdict
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from sklearn.metrics import (
     confusion_matrix, roc_auc_score, roc_curve, accuracy_score,
     precision_score, recall_score, f1_score, silhouette_score
 )
-from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import cross_val_score
-import seaborn as sns
-import pandas as pd
-import warnings
-from datetime import datetime
+from sklearn.neighbors import KNeighborsClassifier
+from torch.utils.data import DataLoader, TensorDataset
+
 warnings.filterwarnings('ignore')
 
 # ==================== 模型定义 ====================

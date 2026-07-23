@@ -1,12 +1,12 @@
 import os
-import tempfile
+from pathlib import Path
+
+import ms_entropy
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from pathlib import Path
 from safetensors.torch import load_file
-import ms_entropy
+
 from app.recognizer import check_spectrum_similarity
 
 # Global singleton for the model

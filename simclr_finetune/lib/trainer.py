@@ -1,8 +1,10 @@
 import copy
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 from sklearn.metrics import roc_auc_score
+
 
 def safe_auc(labels, probs):
     """数值安全的 AUC 计算"""

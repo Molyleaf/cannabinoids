@@ -1,7 +1,6 @@
+import json
 import os
 import sys
-import json
-import numpy as np
 
 # 将项目根目录添加进 python 路径
 project_root = r"d:\UserFiles\Documents\PyCharm\cannabinoids"

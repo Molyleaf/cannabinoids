@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 
 class SpectrumEncoder(nn.Module):
     """1D-CNN 质谱编码器"""

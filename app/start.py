@@ -1,6 +1,7 @@
 import os
-import sys
 import subprocess
+import sys
+
 
 def main():
     streamlit_enable = os.environ.get("STREAMLIT_ENABLE", "").strip().lower()

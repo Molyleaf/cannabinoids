@@ -1,6 +1,8 @@
-import torch
-import random
 import math
+import random
+
+import torch
+
 
 class SpectrumAugmentation:
     """

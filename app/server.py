@@ -1,7 +1,9 @@
+from typing import Optional, List
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
+
 from app.pipeline import run_pipeline
 
 app = FastAPI(

@@ -1,11 +1,11 @@
-import os
-import shutil
+from datetime import datetime
+from pathlib import Path
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from pathlib import Path
-from datetime import datetime
+
 from simclr_pretrain.lib.models import SpectrumEncoder
+
 
 class BinaryClassifier(nn.Module):
     """二分类模型（挂载在质谱编码器之上）"""

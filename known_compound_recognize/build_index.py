@@ -1,6 +1,8 @@
 import os
+
 import numpy as np
 from ms_entropy import read_one_spectrum, clean_spectrum, FlashEntropySearch
+
 
 def build_positive_index():
     current_dir = os.path.dirname(os.path.abspath(__file__))
