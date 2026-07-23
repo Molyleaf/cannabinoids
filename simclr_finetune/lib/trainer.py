@@ -169,13 +169,9 @@ def train_binary_classifier(
         'val_auc': val_aucs,
     }
     
-    # 显式等待 CUDA 异步任务完成并清理显存，防止函数返回时垃圾回收引发 CUDA Access Violation 崩溃
+    # 显式等待 CUDA 异步任务完成，安全释放 GPU 显存
     if torch.cuda.is_available():
         torch.cuda.synchronize()
         torch.cuda.empty_cache()
-        
-    del optimizer, scheduler
-    if scaler is not None:
-        del scaler
         
     return model, history
