@@ -160,6 +160,25 @@ def train_binary_classifier(
     model.to(device)
     print(f"  [OK] 最佳分类头权重已恢复 (最佳 Val Loss: {best_val_loss:.4f})", flush=True)
     
+    # ===== 优先安全落盘保障 =====
+    try:
+        from pathlib import Path
+        save_dir = Path(__file__).parent.parent
+        checkpoint_path = save_dir / "latest_trained_model.pt"
+        torch.save({
+            'classifier_state_dict': model.classifier.state_dict(),
+            'best_val_loss': float(best_val_loss),
+        }, str(checkpoint_path))
+        print(f"  [OK] 训练结束！最佳模型权重已优先安全落盘至:\n       --> {checkpoint_path}", flush=True)
+    except Exception as e:
+        print(f"  [WARN] 优先落盘失败: {e}", flush=True)
+
+    # 显式等待 CUDA 异步任务安全收尾，并将模型安全转移回 CPU
+    if device.type == 'cuda':
+        torch.cuda.synchronize()
+    model.to('cpu')
+    print("  [OK] 模型已平稳解绑 CUDA 并切换至 CPU 设备", flush=True)
+    
     history = {
         'train_loss': train_losses,
         'val_loss': val_losses,
@@ -168,9 +187,5 @@ def train_binary_classifier(
         'train_auc': train_aucs,
         'val_auc': val_aucs,
     }
-    
-    # 显式等待 CUDA 异步任务安全收尾
-    if device.type == 'cuda':
-        torch.cuda.synchronize()
         
     return model, history

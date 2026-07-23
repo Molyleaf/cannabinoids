@@ -24,37 +24,27 @@ def safe_auc(labels, probs):
         return 0.5
 
 
-def evaluate_and_record_predictions(model, data_loader, sample_names=None, device='cuda', threshold=0.5):
+def evaluate_and_record_predictions(model, data_loader, sample_names=None, device='cpu', threshold=0.5):
     """
-    运行谱图级别的评估逻辑，并按 DataLoader 顺序记录每个样本的预测结果。
+    运行谱图级别的评估逻辑（强制定向至 CPU 运行，彻底免疫 GPU 驱动与 CUDA 上下文越界风险）。
     要求 data_loader 的 shuffle=False，这样样本顺序与 dataset 及 sample_names 一致。
     """
-    dev = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
+    dev = torch.device('cpu')
     model.eval()
     model.to(dev)
-    if dev.type == 'cuda':
-        torch.cuda.synchronize()
     
     all_probs, all_labels, all_preds = [], [], []
-    use_amp = (dev.type == 'cuda')
     
     with torch.no_grad():
         for batch_spec, batch_labels in data_loader:
             batch_spec = batch_spec.to(dev)
             batch_labels = batch_labels.to(dev)
-            if use_amp:
-                with torch.amp.autocast('cuda'):
-                    logits = model(batch_spec)
-            else:
-                logits = model(batch_spec)
+            logits = model(batch_spec)
             probs = torch.sigmoid(logits)
             
-            all_probs.extend(probs.cpu().numpy().ravel())
-            all_labels.extend(batch_labels.cpu().numpy().ravel())
-            all_preds.extend((probs >= threshold).float().cpu().numpy().ravel())
-            
-    if dev.type == 'cuda':
-        torch.cuda.synchronize()
+            all_probs.extend(probs.numpy().ravel())
+            all_labels.extend(batch_labels.numpy().ravel())
+            all_preds.extend((probs >= threshold).float().numpy().ravel())
             
     all_probs = np.array(all_probs)
     all_labels = np.array(all_labels)
