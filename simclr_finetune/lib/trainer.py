@@ -146,7 +146,7 @@ def train_binary_classifier(
         
         if avg_val_loss < best_val_loss - 1e-4:
             best_val_loss = avg_val_loss
-            best_classifier_state = copy.deepcopy(model.classifier.state_dict())
+            best_classifier_state = {k: v.cpu().clone() for k, v in model.classifier.state_dict().items()}
             patience_counter = 0
         else:
             patience_counter += 1
@@ -155,7 +155,7 @@ def train_binary_classifier(
                 break
     
     if best_classifier_state is not None:
-        model.classifier.load_state_dict(best_classifier_state)
+        model.classifier.load_state_dict({k: v.to(device) for k, v in best_classifier_state.items()})
         
     model.to(device)
     print(f"  [OK] 最佳分类头权重已恢复 (最佳 Val Loss: {best_val_loss:.4f})", flush=True)
@@ -169,9 +169,8 @@ def train_binary_classifier(
         'val_auc': val_aucs,
     }
     
-    # 显式等待 CUDA 异步任务完成，安全释放 GPU 显存
-    if torch.cuda.is_available():
+    # 显式等待 CUDA 异步任务安全收尾
+    if device.type == 'cuda':
         torch.cuda.synchronize()
-        torch.cuda.empty_cache()
         
     return model, history
