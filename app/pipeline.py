@@ -70,37 +70,54 @@ class BinaryClassifier(nn.Module):
         return logit.squeeze(-1)
 
 
-def get_classifier_model(safetensors_path: str = None) -> BinaryClassifier:
+def get_classifier_model(safetensors_path: str = None, model_path: str = None) -> BinaryClassifier:
     """
     懒加载模式初始化并获取二进制风险分类模型。
-    支持从 .safetensors 文件读取权重。
+    支持从 .safetensors 或 .pt 文件读取权重。
     """
     global _classifier_model
-    if _classifier_model is None:
-        if safetensors_path is None:
-            models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-            candidates = sorted(list(Path(models_dir).glob("*.safetensors")), key=lambda p: p.stat().st_mtime, reverse=True)
-            if candidates:
-                safetensors_path = str(candidates[0])
-            else:
-                safetensors_path = os.path.join(models_dir, "binary_classifier_weights_20260722_211225.safetensors")
-            
-        if not os.path.exists(safetensors_path):
-            raise FileNotFoundError(
-                f"Safetensors weight file not found at {safetensors_path}. "
-                "Please run offline conversion script scratch/convert_weights_to_safetensors.py first."
-            )
-            
-        encoder = SpectrumEncoder(input_dim=561, hidden_dim=256)
-        model = BinaryClassifier(encoder=encoder, input_dim=256, freeze_encoder=True)
-        
-        # 从 safetensors 文件中载入权重
-        state_dict = load_file(safetensors_path)
-        model.load_state_dict(state_dict)
-        model.eval()
-        _classifier_model = model
+    target_path = model_path or safetensors_path
 
+    if target_path is None and _classifier_model is not None:
+        return _classifier_model
+
+    if target_path is None:
+        models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+        candidates = sorted(list(Path(models_dir).glob("*.safetensors")), key=lambda p: p.stat().st_mtime, reverse=True)
+        if candidates:
+            target_path = str(candidates[0])
+        else:
+            candidates_pt = sorted(list(Path(models_dir).glob("*.pt")), key=lambda p: p.stat().st_mtime, reverse=True)
+            if candidates_pt:
+                target_path = str(candidates_pt[0])
+            else:
+                target_path = os.path.join(models_dir, "binary_classifier_weights_20260722_211225.safetensors")
+
+    if not os.path.exists(target_path):
+        raise FileNotFoundError(f"Model weight file not found at {target_path}.")
+
+    encoder = SpectrumEncoder(input_dim=561, hidden_dim=256)
+    model = BinaryClassifier(encoder=encoder, input_dim=256, freeze_encoder=True)
+
+    if str(target_path).endswith(".pt"):
+        ckpt = torch.load(target_path, map_location="cpu", weights_only=False)
+        if isinstance(ckpt, dict) and "encoder_state_dict" in ckpt and "classifier_state_dict" in ckpt:
+            model.encoder.load_state_dict(ckpt["encoder_state_dict"])
+            model.classifier.load_state_dict(ckpt["classifier_state_dict"])
+        elif isinstance(ckpt, dict) and "state_dict" in ckpt:
+            model.load_state_dict(ckpt["state_dict"])
+        elif isinstance(ckpt, dict):
+            model.load_state_dict(ckpt)
+        else:
+            model = ckpt
+    else:
+        state_dict = load_file(target_path)
+        model.load_state_dict(state_dict)
+
+    model.eval()
+    _classifier_model = model
     return _classifier_model
+
 
 
 def peaks_to_vector(peaks, mz_min=40, mz_max=600) -> np.ndarray:
@@ -176,15 +193,20 @@ def parse_msp_bytes(file_bytes: bytes, min_peaks: int = 1) -> list:
             elif lower.startswith('num peaks:') or lower.startswith('num_peaks:'):
                 in_peaks = True
             elif in_peaks:
-                parts = stripped.replace(';', ' ').replace('\t', ' ').split()
-                if len(parts) >= 2:
-                    try:
-                        mz = float(parts[0])
-                        intensity = float(parts[1])
-                        if mz > 0 and intensity > 0:
-                            current_comp['peaks'].append([mz, intensity])
-                    except ValueError:
-                        in_peaks = False
+                sub_items = stripped.split(';')
+                for sub in sub_items:
+                    sub = sub.strip()
+                    if not sub:
+                        continue
+                    parts = sub.replace('\t', ' ').split()
+                    if len(parts) >= 2:
+                        try:
+                            mz = float(parts[0])
+                            intensity = float(parts[1])
+                            if mz > 0 and intensity > 0:
+                                current_comp['peaks'].append([mz, intensity])
+                        except ValueError:
+                            pass
                         
     if current_comp is not None and len(current_comp['peaks']) >= min_peaks:
         compounds.append(current_comp)
@@ -192,12 +214,12 @@ def parse_msp_bytes(file_bytes: bytes, min_peaks: int = 1) -> list:
     return compounds
 
 
-def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75) -> dict:
+def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75, model_path: str = None) -> dict:
     """
     测样管线核心执行函数：
     1. 导入单个 msp 或 mgf 质谱，使用 parse_msp_bytes 鲁棒解析
     2. 使用 app/recognizer.py 的 check_spectrum_similarity 获取已知库匹配
-    3. 使用 safetensors 模型推断该质谱数据的风险概率
+    3. 使用 safetensors / .pt 模型推断该质谱数据的风险概率
     """
     compounds = parse_msp_bytes(file_bytes, min_peaks=1)
     if not compounds:
@@ -224,12 +246,12 @@ def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75)
     is_known_compound = bool(matched_smiles_or_bool)
     matched_smiles = matched_smiles_or_bool if isinstance(matched_smiles_or_bool, str) else ""
 
-    # safetensors 模型深度学习风险推断 (使用原始离子强度的 peaks_raw 进行 1D 特征向量转换)
+    # 模型深度学习风险推断 (使用原始离子强度的 peaks_raw 进行 1D 特征向量转换)
     vec = peaks_to_vector(peaks_raw)
     vec_norm = preprocess_spectra(vec)
     x_tensor = torch.tensor(vec_norm, dtype=torch.float32)
 
-    model = get_classifier_model()
+    model = get_classifier_model(model_path=model_path)
     dev = next(model.parameters()).device
     x_tensor = x_tensor.to(dev)
 
@@ -259,13 +281,13 @@ def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75)
     }
 
 
-def run_pipeline_batch(file_bytes: bytes, filename: str, min_similarity: float = 0.75, batch_size: int = 1024) -> dict:
+def run_pipeline_batch(file_bytes: bytes, filename: str, min_similarity: float = 0.75, batch_size: int = 1024, model_path: str = None) -> dict:
     """
     测样管线批量处理函数：
     能够高效处理包含成千上万条质谱的 MSP 或 MGF 文件。
     1. 使用 parse_msp_bytes 鲁棒状态机解析全部质谱
     2. 使用 FlashEntropySearch 批量检索已知库匹配
-    3. 批量使用 PyTorch safetensors 神经分类器进行风险推理
+    3. 批量使用 PyTorch safetensors / .pt 神经分类器进行风险推理
     4. 返回总体统计数据与逐条测试详情
     """
     compounds = parse_msp_bytes(file_bytes, min_peaks=1)
@@ -316,7 +338,7 @@ def run_pipeline_batch(file_bytes: bytes, filename: str, min_similarity: float =
     if vectors:
         vecs_arr = np.array(vectors, dtype=np.float32)
         vecs_norm = preprocess_spectra(vecs_arr)
-        model = get_classifier_model()
+        model = get_classifier_model(model_path=model_path)
         dev = next(model.parameters()).device
         
         all_probs = []
