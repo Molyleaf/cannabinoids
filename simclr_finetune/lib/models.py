@@ -103,5 +103,5 @@ def save_model_checkpoint(obj, target_dir):
     save_path = target_dir / f"binary_classifier_{timestamp}.pt"
     
     torch.save(obj, str(save_path))
-    print(f"  [OK] 模型权重已保存至全新时间戳文件: {save_path}")
+    print(f"  [OK] 模型权重已保存至全新时间戳文件: {save_path}", flush=True)
     return save_path

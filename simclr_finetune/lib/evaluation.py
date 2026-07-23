@@ -2,9 +2,7 @@ import torch
 import numpy as np
 import pandas as pd
 import matplotlib
-import sys
-if 'ipykernel' not in sys.modules:
-    matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
@@ -145,44 +143,48 @@ def evaluate_positive_per_smiles(test_indices, smiles_all, labels_all, probs, pr
     }
 
 
+import csv
+
 def export_results_to_excel(
     history, model, train_results, val_results, test_results,
     smiles_results, meta, output_dir
 ):
-    """导出结果至 Excel/CSV"""
+    """导出评估结果至 CSV 文件（纯 Python 标准库实现，带 BOM 格式供 Excel 直接无乱码打开，彻底消除 PyCharm 变量预览插件冲突）"""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    max_len = max(len(history['train_loss']), len(history['val_loss']))
-    df_history = pd.DataFrame({
-        'Epoch': list(range(1, max_len + 1)),
-        'Train_Loss': history['train_loss'] + [np.nan] * (max_len - len(history['train_loss'])),
-        'Val_Loss': history['val_loss'] + [np.nan] * (max_len - len(history['val_loss'])),
-        'Train_Acc': history['train_acc'] + [np.nan] * (max_len - len(history['train_acc'])),
-        'Val_Acc': history['val_acc'] + [np.nan] * (max_len - len(history['val_acc'])),
-        'Train_AUC': history['train_auc'] + [np.nan] * (max_len - len(history['train_auc'])),
-        'Val_AUC': history['val_auc'] + [np.nan] * (max_len - len(history['val_auc'])),
-    })
+    csv_dir = output_dir
     
-    df_summary = pd.DataFrame({
-        'Dataset': ['Train', 'Validation', 'Test'],
-        'Samples': [train_results['n_samples'], val_results['n_samples'], test_results['n_samples']],
-        'Positive': [train_results['n_pos'], val_results['n_pos'], test_results['n_pos']],
-        'Negative': [train_results['n_neg'], val_results['n_neg'], test_results['n_neg']],
-        'Accuracy': [train_results['accuracy'], val_results['accuracy'], test_results['accuracy']],
-        'Precision': [train_results['precision'], val_results['precision'], test_results['precision']],
-        'Recall': [train_results['recall'], val_results['recall'], test_results['recall']],
-        'F1': [train_results['f1'], val_results['f1'], test_results['f1']],
-        'AUC': [train_results['auc'], val_results['auc'], test_results['auc']],
-        'TN': [train_results['confusion_matrix'][0,0], val_results['confusion_matrix'][0,0], test_results['confusion_matrix'][0,0]],
-        'FP': [train_results['confusion_matrix'][0,1], val_results['confusion_matrix'][0,1], test_results['confusion_matrix'][0,1]],
-        'FN': [train_results['confusion_matrix'][1,0], val_results['confusion_matrix'][1,0], test_results['confusion_matrix'][1,0]],
-        'TP': [train_results['confusion_matrix'][1,1], val_results['confusion_matrix'][1,1], test_results['confusion_matrix'][1,1]],
-    })
-    
-    def get_pred_df(res, fallback_idx, fallback_key):
-        if res.get('df_pred') is not None:
-            return res['df_pred']
+    # 1. 保存 Training History
+    with open(csv_dir / 'training_history.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Epoch', 'Train_Loss', 'Val_Loss', 'Train_Acc', 'Val_Acc', 'Train_AUC', 'Val_AUC'])
+        max_len = max(len(history['train_loss']), len(history['val_loss']))
+        for i in range(max_len):
+            writer.writerow([
+                i + 1,
+                history['train_loss'][i] if i < len(history['train_loss']) else '',
+                history['val_loss'][i] if i < len(history['val_loss']) else '',
+                history['train_acc'][i] if i < len(history['train_acc']) else '',
+                history['val_acc'][i] if i < len(history['val_acc']) else '',
+                history['train_auc'][i] if i < len(history['train_auc']) else '',
+                history['val_auc'][i] if i < len(history['val_auc']) else '',
+            ])
+            
+    # 2. 保存 Summary Metrics
+    with open(csv_dir / 'summary_metrics.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Dataset', 'Samples', 'Positive', 'Negative', 'Accuracy', 'Precision', 'Recall', 'F1', 'AUC', 'TN', 'FP', 'FN', 'TP'])
+        for name, res in [('Train', train_results), ('Validation', val_results), ('Test', test_results)]:
+            cm = res['confusion_matrix']
+            writer.writerow([
+                name, res['n_samples'], res['n_pos'], res['n_neg'],
+                res['accuracy'], res['precision'], res['recall'], res['f1'], res['auc'],
+                cm[0,0], cm[0,1], cm[1,0], cm[1,1]
+            ])
+            
+    # Helper for predictions
+    def get_sample_names(fallback_idx, fallback_key):
         sample_names = meta.get(fallback_key)
         if sample_names is None:
             sample_names_all = meta.get('sample_names_all')
@@ -191,66 +193,51 @@ def export_results_to_excel(
                 compounds_neg = meta['neg_compounds']
                 sample_names_all = np.array([c['name'] for c in compounds_pos] + [c['name'] for c in compounds_neg])
             sample_names = sample_names_all[fallback_idx]
-        return pd.DataFrame({
-            'Sample_Name': sample_names,
-            'True_Label': res['labels'],
-            'Pred_Prob': res['probs'],
-            'Pred_Label': res['preds'],
-            'Correct': res['labels'] == res['preds'],
-        })
+        return sample_names
+
+    # 3. 保存 各集合预测明细 及 错误样本汇总
+    all_errors_rows = []
+    for name, res, idx, key in [
+        ('Train', train_results, meta['train_idx'], 'train_sample_names'),
+        ('Validation', val_results, meta['val_idx'], 'val_sample_names'),
+        ('Test', test_results, meta['test_idx'], 'test_sample_names')
+    ]:
+        s_names = get_sample_names(idx, key)
+        fname = f"{name.lower()}_predictions.csv"
+        with open(csv_dir / fname, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Sample_Name', 'True_Label', 'Pred_Prob', 'Pred_Label', 'Correct'])
+            for sname, t_lbl, prob, p_lbl in zip(s_names, res['labels'], res['probs'], res['preds']):
+                is_correct = (t_lbl == p_lbl)
+                writer.writerow([sname, t_lbl, prob, p_lbl, is_correct])
+                if not is_correct:
+                    err_type = 'False Positive (FP)' if t_lbl == 0 and p_lbl == 1 else 'False Negative (FN)'
+                    all_errors_rows.append([sname, t_lbl, prob, p_lbl, is_correct, name, err_type])
+                    
+    with open(csv_dir / 'error_predictions.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Sample_Name', 'True_Label', 'Pred_Prob', 'Pred_Label', 'Correct', 'Dataset', 'Error_Type'])
+        writer.writerows(all_errors_rows)
         
-    df_train = get_pred_df(train_results, meta['train_idx'], 'train_sample_names')
-    df_val = get_pred_df(val_results, meta['val_idx'], 'val_sample_names')
-    df_test = get_pred_df(test_results, meta['test_idx'], 'test_sample_names')
-    
-    err_train = df_train[~df_train['Correct']].assign(Dataset='Train')
-    err_val = df_val[~df_val['Correct']].assign(Dataset='Validation')
-    err_test = df_test[~df_test['Correct']].assign(Dataset='Test')
-    all_errors = pd.concat([err_train, err_val, err_test], ignore_index=True)
-    
-    if len(all_errors) > 0:
-        all_errors['Error_Type'] = all_errors.apply(
-            lambda r: 'False Positive (FP)' if r['True_Label'] == 0 and r['Pred_Label'] == 1 else 'False Negative (FN)', axis=1
-        )
-    
-    if smiles_results is not None:
-        df_smiles = pd.DataFrame({
-            'SMILES': smiles_results['smiles_names'],
-            'Spectra_Count': smiles_results['smiles_counts'],
-            'True_Label': smiles_results['smiles_labels'],
-            'Mean_Prob': smiles_results['smiles_probs'],
-            'Pred_Label': smiles_results['smiles_preds'],
-            'Correct': smiles_results['smiles_labels'] == smiles_results['smiles_preds'],
-        })
-    else:
-        df_smiles = pd.DataFrame({'Note': ['No positive samples in test set']})
-        
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    excel_path = output_dir / f'classification_results_{timestamp}.xlsx'
-    
-    try:
-        with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
-            df_history.to_excel(writer, sheet_name='Training_History', index=False)
-            df_summary.to_excel(writer, sheet_name='Summary_Metrics', index=False)
-            df_train.to_excel(writer, sheet_name='Train_Predictions', index=False)
-            df_val.to_excel(writer, sheet_name='Val_Predictions', index=False)
-            df_test.to_excel(writer, sheet_name='Test_Predictions', index=False)
-            all_errors.to_excel(writer, sheet_name='Error_Predictions', index=False)
-            df_smiles.to_excel(writer, sheet_name='SMILES_Level_Results', index=False)
-        print(f"  [OK] 结果 Excel 已保存: {excel_path}", flush=True)
-        return excel_path
-    except Exception as e:
-        csv_dir = output_dir / f"results_{timestamp}"
-        csv_dir.mkdir(parents=True, exist_ok=True)
-        df_history.to_csv(csv_dir / 'training_history.csv', index=False)
-        df_summary.to_csv(csv_dir / 'summary_metrics.csv', index=False)
-        df_train.to_csv(csv_dir / 'train_predictions.csv', index=False)
-        df_val.to_csv(csv_dir / 'val_predictions.csv', index=False)
-        df_test.to_csv(csv_dir / 'test_predictions.csv', index=False)
-        all_errors.to_csv(csv_dir / 'error_predictions.csv', index=False)
-        df_smiles.to_csv(csv_dir / 'smiles_level_results.csv', index=False)
-        print(f"  [WARN] 已自动保存结果 CSV 至: {csv_dir}", flush=True)
-        return csv_dir
+    # 4. 保存 SMILES 级别结果
+    with open(csv_dir / 'smiles_level_results.csv', 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.writer(f)
+        if smiles_results is not None:
+            writer.writerow(['SMILES', 'Spectra_Count', 'True_Label', 'Mean_Prob', 'Pred_Label', 'Correct'])
+            for smi, cnt, t_lbl, m_prob, p_lbl in zip(
+                smiles_results['smiles_names'],
+                smiles_results['smiles_counts'],
+                smiles_results['smiles_labels'],
+                smiles_results['smiles_probs'],
+                smiles_results['smiles_preds']
+            ):
+                writer.writerow([smi, cnt, t_lbl, m_prob, p_lbl, t_lbl == p_lbl])
+        else:
+            writer.writerow(['Note'])
+            writer.writerow(['No positive samples in test set'])
+            
+    print(f"  [OK] 评估表格 CSV 已全部导出至目录: {csv_dir}", flush=True)
+    return csv_dir
 
 
 def plot_comprehensive_results(history, train_results, val_results, test_results, smiles_results, output_dir):
