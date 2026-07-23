@@ -144,7 +144,7 @@ def train_binary_classifier(
         
         if avg_val_loss < best_val_loss - 1e-4:
             best_val_loss = avg_val_loss
-            best_model_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            best_model_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
             patience_counter = 0
         else:
             patience_counter += 1
@@ -154,6 +154,7 @@ def train_binary_classifier(
     
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
+    model.to(device)
     
     history = {
         'train_loss': train_losses,
