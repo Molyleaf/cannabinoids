@@ -138,9 +138,9 @@ def train_binary_classifier(
         
         scheduler.step(avg_val_loss)
         
-        if (epoch - 1) % 10 == 0 or epoch == 1:
+        if (epoch - 1) % 5 == 0 or epoch == 1:
             print(f"Epoch {epoch:3d} | Train Loss: {avg_train_loss:.4f} | Train Acc: {train_acc:.2%} | "
-                  f"Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2%} | LR: {optimizer.param_groups[0]['lr']:.2e}")
+                  f"Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.2%} | LR: {optimizer.param_groups[0]['lr']:.2e}", flush=True)
         
         if avg_val_loss < best_val_loss - 1e-4:
             best_val_loss = avg_val_loss
@@ -149,7 +149,7 @@ def train_binary_classifier(
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"\n触发早停机制，停止于 epoch {epoch}")
+                print(f"\n触发早停机制，停止于 epoch {epoch}", flush=True)
                 break
     
     if best_model_state is not None:
