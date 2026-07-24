@@ -1,0 +1,8 @@
+﻿Split_Name,Global_Index,Compound_Name,True_Label,Predicted_Probability,Num_Peaks,SMILES
+val,136,MN-25-2-methyl derivative,1,0.02947,17,
+val,119,APINAC,1,0.080983,32,
+val,760,Mepirapim,1,0.085556,28,
+val,95,AM2201 N-(4-hydroxypentyl) metabolite,1,0.134271,35,
+val,765,5-fluoro-CYPPICA,1,0.408551,28,
+val,82,5-Fluoro MPP-PICA,1,0.435115,23,
+val,755,MN-18,1,0.447808,17,

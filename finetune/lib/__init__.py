@@ -1,11 +1,11 @@
-from simclr_finetune.lib.dataset import (
+from finetune.lib.dataset import (
     parse_msp_with_smiles,
     peaks_to_vector,
     preprocess_spectra,
     split_positive_by_smiles_negative_random,
     prepare_finetune_dataset
 )
-from simclr_finetune.lib.evaluation import (
+from finetune.lib.evaluation import (
     evaluate_model,
     evaluate_and_record_predictions,
     evaluate_positive_per_smiles,
@@ -13,12 +13,12 @@ from simclr_finetune.lib.evaluation import (
     plot_comprehensive_results,
     plot_confusion_matrices
 )
-from simclr_finetune.lib.models import (
+from finetune.lib.models import (
     BinaryClassifier,
     load_pretrained_encoder,
     save_model_checkpoint
 )
-from simclr_finetune.lib.trainer import train_binary_classifier
+from finetune.lib.trainer import train_binary_classifier
 
 __all__ = [
     'BinaryClassifier',

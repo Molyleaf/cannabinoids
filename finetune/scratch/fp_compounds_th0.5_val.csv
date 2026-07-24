@@ -1,0 +1,5 @@
+﻿Split_Name,Global_Index,Compound_Name,True_Label,Predicted_Probability,Num_Peaks,SMILES
+val,2502,1cP-LSD,0,0.877593,46,
+val,2779,2-Bromo-Lysergic Acid Diethylamide,0,0.755682,45,
+val,2862,(.+/-.)-.alpha.-Tocopherol Acetate,0,0.696044,25,
+val,2235,Isotodesnitazene,0,0.644518,22,

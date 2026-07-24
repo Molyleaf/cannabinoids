@@ -1,0 +1,12 @@
+﻿Split_Name,Global_Index,Compound_Name,True_Label,Predicted_Probability,Num_Peaks,SMILES
+test,131,AM1248,1,0.004451,12,
+test,129,"A-796,260 degradant",1,0.004771,10,
+test,610,48-08,1,0.061093,20,O=C(Oc1cccc2ccccc12)c1cn(Cc2ccc(F)cc2)c2ccccc12
+test,607,48-05,1,0.065379,21,O=C(Oc1cccc2ccccc12)c1cn(Cc2ccc(F)cc2)c2ccccc12
+test,76,NNEI,1,0.083003,13,
+test,789,5-fluoro MN-18,1,0.084873,26,
+test,756,5-fluoro MN-18,1,0.084873,26,
+test,787,5-Fluoro-APINAC,1,0.088695,34,
+test,783,AM2233 azepane isomer,1,0.273437,47,
+test,769,AM694 chloro derivative,1,0.466385,29,
+test,609,48-07,1,0.471353,21,O=C(Oc1cccc2ccccc12)c1cn(Cc2ccc(F)cc2)c2ccccc12

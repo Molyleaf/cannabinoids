@@ -1,0 +1,4 @@
+﻿Threshold,Dataset_Split,Total_Samples,True_Negative_TN,False_Positive_FP,False_Negative_FN,True_Positive_TP,Accuracy,Precision,Recall_TPR,F1_Score,Specificity,False_Positive_Rate_FPR,False_Negative_Rate_FNR
+0.5,train,2433,1436,33,10,954,0.982326,0.966565,0.989627,0.97796,0.977536,0.022464,0.010373
+0.5,val,495,310,4,7,174,0.977778,0.977528,0.961326,0.969359,0.987261,0.012739,0.038674
+0.5,test,525,304,10,11,200,0.96,0.952381,0.947867,0.950119,0.968153,0.031847,0.052133

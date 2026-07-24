@@ -58,7 +58,9 @@ data_preprocessed/
 *.msp
 *.safetensors
 *.xlsx
+*.parquet
 
 app/cache/positive_idx/
+
 simclr_finetune/scratch/
 simclr_finetune/results_*

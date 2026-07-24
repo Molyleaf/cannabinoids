@@ -1,91 +1,17 @@
 from pathlib import Path
-
-import ms_entropy
+import sys
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
+# 动态确保项目根目录在 python 模块路径中
+project_root = Path(__file__).resolve().parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
-def parse_msp_with_smiles(msp_file, min_peaks=5):
-    """解析 MSP 文件，返回包含 SMILES 的化合物字典列表 (鲁棒状态机模式)"""
-    msp_file = Path(msp_file)
-    print(f"  正在解析 MSP 文件: {msp_file.name}...")
-    with open(msp_file, 'r', encoding='utf-8', errors='ignore') as f:
-        lines = f.readlines()
-    
-    compounds = []
-    current_comp = None
-    in_peaks = False
-    
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-            
-        lower = stripped.lower()
-        if lower.startswith('name:'):
-            if current_comp is not None and 'peaks' in current_comp:
-                if len(current_comp['peaks']) >= min_peaks:
-                    compounds.append(current_comp)
-            current_comp = {
-                'name': stripped.split(':', 1)[1].strip() if ':' in stripped else stripped,
-                'smiles': '',
-                'peaks': []
-            }
-            in_peaks = False
-        elif current_comp is not None:
-            if lower.startswith('smiles:'):
-                current_comp['smiles'] = stripped.split(':', 1)[1].strip()
-            elif lower.startswith('num peaks:') or lower.startswith('num_peaks:'):
-                in_peaks = True
-            else:
-                # 尝试解析峰数据 (支持分号隔开的多峰行，或直接 mz intensity 格式)
-                sub_items = stripped.split(';')
-                has_valid_peak = False
-                for sub in sub_items:
-                    sub = sub.strip()
-                    if not sub:
-                        continue
-                    parts = sub.replace('\t', ' ').split()
-                    if len(parts) >= 2:
-                        try:
-                            mz = float(parts[0])
-                            intensity = float(parts[1])
-                            if mz > 0 and intensity > 0:
-                                current_comp['peaks'].append((mz, intensity))
-                                has_valid_peak = True
-                        except ValueError:
-                            pass
-                if has_valid_peak:
-                    in_peaks = True
-    
-    if current_comp is not None and 'peaks' in current_comp:
-        if len(current_comp['peaks']) >= min_peaks:
-            compounds.append(current_comp)
-    
-    print(f"  [OK] 成功解析出 {len(compounds)} 个化合物谱图")
-    return compounds
-
-
-
-def peaks_to_vector(peaks, mz_min=40, mz_max=600):
-    """将 (mz, intensity) 峰列表映射为 561 维数值向量"""
-    dim = mz_max - mz_min + 1
-    vec = np.zeros(dim, dtype=np.float32)
-    for mz, intensity in peaks:
-        if mz_min <= mz <= mz_max:
-            idx = int(round(mz - mz_min))
-            if 0 <= idx < dim:
-                vec[idx] += intensity
-    return vec
-
-
-def preprocess_spectra(spectra):
-    """对质谱向量进行 TIC 归一化 + 平方根缩放"""
-    tic = spectra.sum(axis=1, keepdims=True)
-    spectra = spectra / (tic + 1e-8)
-    spectra = np.sqrt(spectra)
-    return spectra.astype(np.float32)
+from common.data_processor import parse_msp as parse_msp_with_smiles
+from common.data_processor import clean_spectrum, peaks_to_vector, preprocess_spectra
+from common.augmentation import SpectrumAugmentation
 
 
 def split_positive_by_smiles_negative_random(
@@ -158,14 +84,10 @@ def prepare_finetune_dataset(
         pos_compounds = [comp for i, comp in enumerate(pos_compounds) if i not in alpha_pbp_indices]
         neg_compounds.extend(removed_comps)
         print(f"  [OK] 已将 {len(removed_comps)} 个 '.alpha.-pbp' 样本从阳性移至阴性集")
-        
-    def clean_peaks(peaks):
-        arr = np.array(peaks, dtype=np.float32)
-        return ms_entropy.clean_spectrum(arr)
 
-    pos_spectra = np.array([peaks_to_vector(clean_peaks(c['peaks'])) for c in pos_compounds])
+    pos_spectra = np.array([peaks_to_vector(clean_spectrum(c['peaks'])) for c in pos_compounds])
     pos_smiles = np.array([c['smiles'] if c['smiles'] else c['name'] for c in pos_compounds])
-    neg_spectra = np.array([peaks_to_vector(clean_peaks(c['peaks'])) for c in neg_compounds])
+    neg_spectra = np.array([peaks_to_vector(clean_spectrum(c['peaks'])) for c in neg_compounds])
     
     X_pos = preprocess_spectra(pos_spectra)
     X_neg = preprocess_spectra(neg_spectra)
@@ -182,14 +104,12 @@ def prepare_finetune_dataset(
         test_size=test_size, val_size=val_size, random_state=random_state
     )
     
-    # 生成所有样本的名称数组
     sample_names_all = np.array([c['name'] for c in pos_compounds] + [c['name'] for c in neg_compounds])
     
     train_sample_names = sample_names_all[train_idx]
     val_sample_names = sample_names_all[val_idx]
     test_sample_names = sample_names_all[test_idx]
     
-    # 在 Windows 上使用 CPU TensorDataset 时禁用 pin_memory，防止无声 Access Violation 崩溃
     pin_mem = False
     
     train_dataset = TensorDataset(torch.tensor(X[train_idx]), torch.tensor(y[train_idx]))

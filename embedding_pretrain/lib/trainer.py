@@ -1,6 +1,6 @@
 import torch
 
-from simclr_pretrain.lib.losses import nt_xent_loss
+from embedding_pretrain.lib.losses import nt_xent_loss
 
 
 def train_step(model, spec, optimizer, augmenter, device, scaler, temperature):

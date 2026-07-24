@@ -7,9 +7,9 @@ PROJECT_ROOT = r"d:\UserFiles\Documents\PyCharm\cannabinoids"
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from simclr_finetune.lib.dataset import prepare_finetune_dataset
-from simclr_finetune.lib.models import SpectrumEncoder, BinaryClassifier
-from simclr_finetune.lib.evaluation import evaluate_and_record_predictions
+from finetune.lib.dataset import prepare_finetune_dataset
+from finetune.lib.models import SpectrumEncoder, BinaryClassifier
+from finetune.lib.evaluation import evaluate_and_record_predictions
 
 def main():
     pos_msp = os.path.join(PROJECT_ROOT, "simclr_finetune", "data_source", "阳性-含CanonicalSMILES-5类骨架(4).msp")

@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import ms_entropy
@@ -7,6 +8,12 @@ import torch
 import torch.nn as nn
 from safetensors.torch import load_file
 
+# 动态确保项目根目录在 python 模块路径中
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from common.data_processor import peaks_to_vector, preprocess_spectra, clean_spectrum
 from app.recognizer import check_spectrum_similarity
 
 # Global singleton for the model

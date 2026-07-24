@@ -1,0 +1,11 @@
+﻿Split_Name,Global_Index,Compound_Name,True_Label,Predicted_Probability,Num_Peaks,SMILES
+test,3001,"N,N-didesmethyl U-47700",0,0.98993,31,
+test,2213,2-fluoro Viminol,0,0.941672,29,
+test,2535,Delta9-THCH Acetate,0,0.908894,41,
+test,2370,JW 618,0,0.878864,29,
+test,2656,Mefloquine,0,0.851272,15,
+test,2225,N-desethyl Isotonitazene-d7,0,0.840527,28,
+test,2624,9(R)-Hexahydrocannabinol-C9,0,0.689014,45,
+test,2085,"1,1-BIS(4-CHLOROPHENYL)-2,2,2-TRICHLOROETHANE",0,0.679513,31,
+test,1724,"2-ACETOXYETHYL-2,8-DIMETHYL-6-HEXYL-8-(2-HYDROXYETHYL)-3,4,9,10-TETRAHYDRO-2H,8H-BENZO(1,2-B:3,4-B')DIPYRAN",0,0.638971,31,
+test,2196,Fenofibrate,0,0.615547,25,

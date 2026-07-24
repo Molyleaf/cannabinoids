@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
-from simclr_pretrain.lib.models import SpectrumEncoder
+from embedding_pretrain.lib.models import SpectrumEncoder
 
 
 class BinaryClassifier(nn.Module):

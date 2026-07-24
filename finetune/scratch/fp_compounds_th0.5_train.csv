@@ -1,0 +1,34 @@
+﻿Split_Name,Global_Index,Compound_Name,True_Label,Predicted_Probability,Num_Peaks,SMILES
+train,2766,25T2-NB4OMe TFA derivative,0,0.939303,32,
+train,2830,N-(2C-T) Fentanyl,0,0.930546,27,
+train,3080,N-ethyl Nitrazepam,0,0.905052,38,
+train,2276,Halazepam,0,0.893207,48,
+train,2472,Deschloro W-19,0,0.873746,18,
+train,2886,N-Acetyl 25I-NBOMe,0,0.848001,21,
+train,3208,Trenbolone Acetate,0,0.815032,39,
+train,2848,Etonitazene-d5,0,0.809795,7,
+train,1443,Vitexicarpin,0,0.800148,41,
+train,49,jwh-200-analog-1,0,0.795936,23,C/C(=C\C(=O)c1cn(CCN2CCOCC2)c2ccccc12)C(C)(C)C
+train,302,15-10,0,0.795363,61,CCCCCn1nc(C(=O)Nc2cccc3cccnc23)c2ccccc21
+train,816,rcs-4-m9-metabolite,0,0.790335,119,CC(O)CCCn1cc(C(=O)c2ccc(O)cc2)c2ccccc21
+train,464,34-02,0,0.771719,30,
+train,978,bzo-poxizid-d9,0,0.760979,70,[2H]C([2H])([2H])C([2H])([2H])C([2H])([2H])C([2H])([2H])CN1C(=O)/C(=N\NC(=O)c2ccccc2)c2ccccc21
+train,72,AM2201 N-(3-chloropentyl) analog,0,0.74428,43,
+train,1512,"7beta,12beta-Dihydroxy-5alpha-cholan-24-oic acid Methyl ester",0,0.739156,15,
+train,87,5-Fluoro-NNEI,0,0.73871,13,
+train,2637,iso-Hexahydrocannabinol Acetate,0,0.722936,43,
+train,1372,Cannabigerol dimethyl ether,0,0.718242,35,
+train,2204,Phentermine HFBA Derivative,0,0.715955,19,
+train,2178,M-144,0,0.69738,45,
+train,248,10-06,0,0.680758,61,
+train,1302,5-fluoro-cumyl-p7aica,0,0.650806,70,CC(C)(NC(=O)c1cn(CCCCCF)c2ncccc12)c1ccccc1
+train,1040,rcs-8,0,0.618643,19,COc1ccccc1CC(=O)c1cn(CCC2CCCCC2)c2ccccc12
+train,175,03-03,0,0.591922,52,COC(=O)C(NC(=O)c1nn(CCCCCF)c2ccccc12)C(C)C
+train,2952,7-hydroxy Mitragynine,0,0.577197,40,
+train,673,5-fluoro-mdmb-7-paica,0,0.566259,43,COC(=O)[C@@H](NC(=O)c1cn(CCCCCF)c2ncccc12)C(C)(C)C
+train,1359,Myclobutanil,0,0.540433,32,
+train,548,42-06,0,0.539077,57,CC(C)[C@H](NC(=O)c1c2ccccc2nn1Cc1ccc(F)cc1)C(N)=O
+train,149,nm2201,0,0.528235,20,O=C(Oc1cccc2ccccc12)c1cn(CCCCCF)c2ccccc12
+train,1306,jwh-072-n-carboxy-tms,0,0.518288,83,C[Si](C)(C)OC(=O)CCn1cc(C(=O)c2cccc3ccccc23)c2ccccc21
+train,835,jwh-145-2-phenyl-isomer,0,0.512044,138,CCCCCn1ccc(C(=O)c2cccc3ccccc23)c1-c1ccccc1
+train,2198,para-Fluoro Cyclopentyl fentanyl,0,0.510173,26,

@@ -178,7 +178,7 @@ def evaluate_model(model, test_loader, device, temperature=1.0):
 
 
 def analyze_embeddings(model, loader, device, output_dir):
-    """特征空间分析：t-SNE + PCA"""
+    """特征空间分析：t-SNE + pca"""
     model.eval()
     embeddings, labels = [], []
     
@@ -218,8 +218,8 @@ def analyze_embeddings(model, loader, device, output_dir):
     plt.colorbar(scatter, ax=ax)
     ax.grid(True, alpha=0.3)
     
-    # PCA
-    print("  计算 PCA...")
+    # pca
+    print("  计算 pca...")
     pca = PCA(n_components=2, random_state=42)
     emb_pca = pca.fit_transform(emb_sample)
     pca_acc = cross_val_score(KNeighborsClassifier(n_neighbors=5), emb_pca, labels_sample, cv=5).mean()
@@ -228,7 +228,7 @@ def analyze_embeddings(model, loader, device, output_dir):
     scatter = ax.scatter(emb_pca[:, 0], emb_pca[:, 1], c=labels_sample, cmap='coolwarm', alpha=0.6, s=10)
     ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)')
     ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)')
-    ax.set_title(f'PCA (KNN Acc={pca_acc:.3f}, Sil={silhouette_score(emb_pca, labels_sample):.3f})')
+    ax.set_title(f'pca (KNN Acc={pca_acc:.3f}, Sil={silhouette_score(emb_pca, labels_sample):.3f})')
     plt.colorbar(scatter, ax=ax)
     ax.grid(True, alpha=0.3)
     
@@ -277,7 +277,7 @@ def grad_cam_visualization(model, spectrum, output_dir):
     axes[1].plot(mz_axis, spectrum_np, 'b-', alpha=0.3, linewidth=0.8)
     axes[1].fill_between(mz_axis, 0, spectrum_np * cam, color='red', alpha=0.5, label='Important Regions')
     axes[1].set_xlabel('m/z'); axes[1].set_ylabel('Intensity')
-    axes[1].set_title('Grad-CAM - Red regions show important m/z')
+    axes[1].set_title('heatmap - Red regions show important m/z')
     axes[1].legend(); axes[1].grid(True, alpha=0.3)
     
     plt.tight_layout()
@@ -464,9 +464,9 @@ if __name__ == "__main__":
     
     analyze_embeddings(model, test_loader, device, output_dir)
     
-    # ===== 7. Grad-CAM =====
+    # ===== 7. heatmap =====
     print("\n" + "="*60)
-    print("Grad-CAM 可视化")
+    print("heatmap 可视化")
     print("="*60)
     
     # 选择阳性样本
@@ -520,7 +520,7 @@ if __name__ == "__main__":
     print(f"  输出目录: {output_dir}")
     print(f"  结果图: {output_dir / 'evaluation_summary.png'}")
     print(f"  特征图: {output_dir / 'embedding_analysis.png'}")
-    print(f"  Grad-CAM: {output_dir / 'grad_cam.png'}")
+    print(f"  heatmap: {output_dir / 'grad_cam.png'}")
     print(f"  Excel数据:")
     print(f"    - {output_dir / 'metrics.xlsx'}")
     print(f"    - {output_dir / 'predictions.xlsx'}")

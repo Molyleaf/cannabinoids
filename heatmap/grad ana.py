@@ -132,7 +132,7 @@ def preprocess_spectra(spectra):
     return np.sqrt(spectra)
 
 
-# ==================== Grad-CAM ====================
+# ==================== heatmap ====================
 
 def compute_grad_cam(model, spectrum_tensor):
     """
@@ -285,7 +285,7 @@ if __name__ == "__main__":
     
     # ===== 4. Grad-CAM分析 =====
     print("\n" + "="*60)
-    print("Grad-CAM 注意力分析")
+    print("heatmap 注意力分析")
     print("="*60)
     
     mz_min, mz_max = 40, 600
