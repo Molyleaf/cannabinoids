@@ -1,5 +1,6 @@
-import copy
+import math
 
+import copy
 import numpy as np
 import torch
 import torch.nn as nn
@@ -21,7 +22,7 @@ def safe_auc(labels, probs):
 def train_binary_classifier(
     model, train_loader, val_loader, 
     device='cuda', epochs=100, lr=0.001, patience=15, 
-    max_grad_norm=1.0, pos_weight=1.0
+    max_grad_norm=1.0, pos_weight=math.sqrt(1.8)
 ):
     """
     标准的 PyTorch 二分类器微调训练流程
@@ -38,10 +39,10 @@ def train_binary_classifier(
         optimizer, mode='min', factor=0.5, patience=5, min_lr=1e-6
     )
     
-    if pos_weight != 1.0:
+    if pos_weight is not None and pos_weight != 1.0:
         pw_tensor = torch.tensor([pos_weight], device=dev, dtype=torch.float32)
         criterion = nn.BCEWithLogitsLoss(pos_weight=pw_tensor)
-        print(f"  [INFO] 启用正样本损失加权 pos_weight = {pos_weight:.2f}")
+        print(f"  [INFO] 启用正样本损失加权 pos_weight = {pos_weight:.4f}")
     else:
         criterion = nn.BCEWithLogitsLoss()
     
