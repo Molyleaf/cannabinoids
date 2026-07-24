@@ -1,11 +1,13 @@
 """
-SimCLR 多卡 DDP 预训练脚本 (torchrun 启动)
-支持：
-1. 4096 大 Batch Size 优化
-2. NVIDIA DALI 混合加载 (ExternalSource + GPU PyTorch Batch Augmentation)
-3. 工业级 LARS 优化器 (对齐 SimCLR 规范排除 Bias 与 GroupNorm)
-4. 学习率线性缩放 + Linear Warmup 余弦退火
-5. 全局 All-Gather NT-Xent 对比损失
+SimCLR 多卡 DDP 预训练入口 (torchrun 启动)
+
+支持功能：
+1. 默认适应 4 卡 A100 80GB 计算卡 DDP 分布式训练 (4096 大 Batch Size)
+2. 直接从 Parquet 数据源读取已标准化预处理的 561 维质谱特征向量
+3. NVIDIA DALI 数据流加速与 PyTorch DistributedDataLoader 自动降级
+4. 工业级 LARS 优化器 (对齐 SimCLR 规范排除 Bias 与 GroupNorm/LayerNorm Weight Decay)
+5. 学习率线性缩放 (Linear Scaling Rule) + Linear Warmup 余弦退火
+6. DDP 全局 All-Gather NT-Xent 对比损失计算与早停收敛检测
 """
 
 import argparse
@@ -16,6 +18,7 @@ from pathlib import Path
 import sys
 
 import numpy as np
+import pyarrow.parquet as pq
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -45,6 +48,17 @@ except ImportError:
     HAS_DALI = False
 
 
+def load_spectra_from_parquet(data_path: Path) -> np.ndarray:
+    """直接读取已预处理好的 Parquet 质谱特征向量文件"""
+    if not data_path.exists():
+        raise FileNotFoundError(f"错误: 未找到预训练数据文件 {data_path}")
+    
+    table = pq.read_table(str(data_path), columns=['spectrum_vector'])
+    raw_list = table['spectrum_vector'].to_pylist()
+    spectra = np.array(raw_list, dtype=np.float32)
+    return spectra
+
+
 # ==================== DALI Pipeline 定义 ====================
 if HAS_DALI:
     class ExternalInputCallable:
@@ -54,7 +68,6 @@ if HAS_DALI:
             self.shard_id = shard_id
             self.num_shards = num_shards
             
-            # 计算当前 shard 的样本子集
             total_samples = len(data)
             per_shard = total_samples // num_shards
             self.start_idx = shard_id * per_shard
@@ -94,10 +107,8 @@ class LinearWarmupCosineAnnealingLR:
             self.current_epoch += 1
 
         if self.current_epoch <= self.warmup_epochs:
-            # 线性 Warmup 阶段
             lr = self.base_lr * (self.current_epoch / max(1, self.warmup_epochs))
         else:
-            # 余弦退火阶段
             progress = (self.current_epoch - self.warmup_epochs) / max(1, self.max_epochs - self.warmup_epochs)
             lr = self.min_lr + 0.5 * (self.base_lr - self.min_lr) * (1.0 + math.cos(math.pi * progress))
 
@@ -134,25 +145,28 @@ def setup_ddp():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SimCLR 大 Batch 多卡 DDP 预训练")
-    parser.add_argument("--data_path", type=str, default=None, help="预训练 spectra.npy 路径")
-    parser.add_argument("--global_batch_size", type=int, default=4096, help="全局 Batch Size (默认 4096)")
+    base_dir = Path(__file__).resolve().parent
+    default_data_path = base_dir / "data_source" / "preprocessed_spectra.parquet"
+    default_output_dir = base_dir / "pretrained_model_v2"
+
+    parser = argparse.ArgumentParser(description="SimCLR 4卡 A100 DDP 对比学习预训练")
+    parser.add_argument("--data_path", type=str, default=str(default_data_path), help="预训练 Parquet 数据路径")
+    parser.add_argument("--global_batch_size", type=int, default=4096, help="全局 Batch Size (默认 4096，适应 4 卡 A100)")
     parser.add_argument("--base_lr", type=float, default=0.3, help="基础学习率 (用于 256 Batch 下的基准)")
     parser.add_argument("--warmup_epochs", type=int, default=10, help="Linear Warmup 轮数")
     parser.add_argument("--max_epochs", type=int, default=500, help="最大训练轮数")
     parser.add_argument("--temperature", type=float, default=0.07, help="NT-Xent 温度系数")
     parser.add_argument("--weight_decay", type=float, default=1e-6, help="LARS Weight Decay")
-    parser.add_argument("--output_dir", type=str, default=None, help="模型输出保存目录")
-    parser.add_argument("--use_dali", action="store_true", help="显式启用 DALI 加载器 (自动降级支持)")
+    parser.add_argument("--patience", type=int, default=30, help="早停耐心值 (Patience)")
+    parser.add_argument("--output_dir", type=str, default=str(default_output_dir), help="模型输出保存目录")
+    parser.add_argument("--use_dali", action="store_true", help="启用 NVIDIA DALI GPU 加载器")
     args = parser.parse_args()
 
     rank, world_size, local_rank, device = setup_ddp()
     is_main_process = (rank == 0)
 
-    # 路径解析
-    base_dir = Path(__file__).resolve().parent
-    data_path = Path(args.data_path) if args.data_path else base_dir / "pretrain_spectra.npy"
-    output_dir = Path(args.output_dir) if args.output_dir else base_dir / "pretrained_model_v2"
+    data_path = Path(args.data_path)
+    output_dir = Path(args.output_dir)
     
     if is_main_process:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -164,11 +178,11 @@ def main():
         print(f"全局 Batch Size: {args.global_batch_size}")
         print(f"每卡 Local Batch Size: {args.global_batch_size // world_size}")
 
-    # 加载数据集
-    if not data_path.exists():
-        raise FileNotFoundError(f"错误: 未找到预训练数据 {data_path}")
-        
-    spectra = np.load(data_path).astype(np.float32)
+    # 从 Parquet 加载数据集
+    spectra = load_spectra_from_parquet(data_path)
+    if is_main_process:
+        print(f"成功加载质谱数据: {spectra.shape[0]:,} 个样本, 维度: {spectra.shape[1]}")
+
     local_batch_size = max(1, args.global_batch_size // world_size)
 
     # 验证是否启用 DALI
@@ -179,19 +193,36 @@ def main():
         else:
             print("[Data Pipeline] 使用 PyTorch DistributedDataLoader")
 
-    if not use_dali:
+    dali_iter = None
+    if use_dali:
+        pipe = create_dali_pipeline(
+            external_data=spectra,
+            batch_size=local_batch_size,
+            shard_id=rank,
+            num_shards=world_size,
+            num_threads=4,
+            device_id=local_rank
+        )
+        pipe.build()
+        dali_iter = DALIGenericIterator(
+            pipe,
+            output_map=["spectra"],
+            last_batch_policy=LastBatchPolicy.DROP,
+            auto_reset=True
+        )
+    else:
         dataset = TensorDataset(torch.from_numpy(spectra))
         sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=True)
         dataloader = DataLoader(
             dataset,
             batch_size=local_batch_size,
             sampler=sampler,
-            num_workers=2 if device.type == 'cuda' else 0,
+            num_workers=4 if device.type == 'cuda' else 0,
             pin_memory=(device.type == 'cuda'),
             drop_last=True
         )
 
-    # 初始化模型与网络结构 (保持 GroupNorm 内部特征归一化)
+    # 初始化模型结构
     input_dim = spectra.shape[1]
     encoder = SpectrumEncoder(input_dim=input_dim, hidden_dim=256).to(device)
     projection_head = ProjectionHead(input_dim=256, hidden_dim=128, output_dim=64).to(device)
@@ -223,6 +254,13 @@ def main():
     # 统一数据增强流水线
     augmenter = SpectrumAugmentation(mode='pretrain')
     
+    # 拟合收敛检测器
+    convergence_checker = ConvergenceChecker(
+        patience=args.patience,
+        min_delta=1e-4,
+        window_size=10
+    )
+
     # 混合精度 Scaler
     scaler = torch.amp.GradScaler('cuda') if device.type == 'cuda' else None
 
@@ -232,33 +270,17 @@ def main():
     start_time = datetime.now()
 
     for epoch in range(1, args.max_epochs + 1):
-        if not use_dali:
+        if use_dali:
+            dali_iter.reset()
+            batch_iterable = dali_iter
+        else:
             sampler.set_epoch(epoch)
+            batch_iterable = dataloader
 
         current_lr = lr_scheduler.step(epoch)
         model.train()
         epoch_loss = 0.0
         n_batches = 0
-
-        if use_dali:
-            # 动态构建 DALI Pipeline
-            pipe = create_dali_pipeline(
-                external_data=spectra,
-                batch_size=local_batch_size,
-                shard_id=rank,
-                num_shards=world_size,
-                num_threads=2,
-                device_id=local_rank
-            )
-            pipe.build()
-            dali_iter = DALIGenericIterator(
-                pipe,
-                output_map=["spectra"],
-                last_batch_policy=LastBatchPolicy.DROP
-            )
-            batch_iterable = dali_iter
-        else:
-            batch_iterable = dataloader
 
         pbar = tqdm(batch_iterable, desc=f'Epoch {epoch:3d}/{args.max_epochs}', disable=not is_main_process)
         
@@ -323,6 +345,13 @@ def main():
                     'loss': avg_loss,
                 }, str(output_dir / 'best_model.pt'))
                 print(f'  ✓ 已更新保存最佳预训练模型 (Loss: {avg_loss:.6f})')
+
+            # 早停拟合检测
+            if convergence_checker.update(avg_loss):
+                print(f"\n{'='*60}")
+                print(f"模型在第 {epoch} 轮收敛，停止训练")
+                print(f"{'='*60}")
+                break
 
     if is_main_process:
         raw_model = model.module if hasattr(model, 'module') else model
