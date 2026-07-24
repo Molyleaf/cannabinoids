@@ -147,7 +147,6 @@ def setup_ddp():
 def main():
     base_dir = Path(__file__).resolve().parent
     default_data_path = base_dir / "data_source" / "preprocessed_spectra.parquet"
-    default_output_dir = base_dir / "pretrained_model_v2"
 
     parser = argparse.ArgumentParser(description="SimCLR 4卡 A100 DDP 对比学习预训练")
     parser.add_argument("--data_path", type=str, default=str(default_data_path), help="预训练 Parquet 数据路径")
@@ -158,7 +157,8 @@ def main():
     parser.add_argument("--temperature", type=float, default=0.07, help="NT-Xent 温度系数")
     parser.add_argument("--weight_decay", type=float, default=1e-6, help="LARS Weight Decay")
     parser.add_argument("--patience", type=int, default=30, help="早停耐心值 (Patience)")
-    parser.add_argument("--output_dir", type=str, default=str(default_output_dir), help="模型输出保存目录")
+    parser.add_argument("--max_samples", type=int, default=None, help="限制样本数量 (用于本地快速测试，默认全量)")
+    parser.add_argument("--output_dir", type=str, default=str(base_dir), help="模型输出保存目录")
     parser.add_argument("--use_dali", action="store_true", help="启用 NVIDIA DALI GPU 加载器")
     args = parser.parse_args()
 
@@ -166,7 +166,12 @@ def main():
     is_main_process = (rank == 0)
 
     data_path = Path(args.data_path)
-    output_dir = Path(args.output_dir)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_out = Path(args.output_dir) if args.output_dir else base_dir
+    if "results_" not in base_out.name:
+        output_dir = base_out / f"results_{timestamp}"
+    else:
+        output_dir = base_out
     
     if is_main_process:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -175,11 +180,15 @@ def main():
         print("=" * 60)
         print(f"Rank: {rank}/{world_size} | Device: {device}")
         print(f"数据文件: {data_path}")
+        print(f"输出目录: {output_dir}")
         print(f"全局 Batch Size: {args.global_batch_size}")
         print(f"每卡 Local Batch Size: {args.global_batch_size // world_size}")
 
     # 从 Parquet 加载数据集
     spectra = load_spectra_from_parquet(data_path)
+    if args.max_samples is not None:
+        spectra = spectra[:args.max_samples]
+
     if is_main_process:
         print(f"成功加载质谱数据: {spectra.shape[0]:,} 个样本, 维度: {spectra.shape[1]}")
 
@@ -344,7 +353,7 @@ def main():
                     'encoder_state_dict': raw_model.encoder.state_dict(),
                     'loss': avg_loss,
                 }, str(output_dir / 'best_model.pt'))
-                print(f'  ✓ 已更新保存最佳预训练模型 (Loss: {avg_loss:.6f})')
+                print(f'  [OK] 已更新保存最佳预训练模型 (Loss: {avg_loss:.6f})')
 
             # 早停拟合检测
             if convergence_checker.update(avg_loss):
@@ -355,8 +364,15 @@ def main():
 
     if is_main_process:
         raw_model = model.module if hasattr(model, 'module') else model
-        torch.save(raw_model.encoder.state_dict(), str(output_dir / 'pretrained_encoder_final_v1.pt'))
-        print(f"\n[OK] 最终编码器已保存: {output_dir / 'pretrained_encoder_final_v1.pt'}")
+        final_encoder_path = output_dir / 'pretrained_encoder_final_v1.pt'
+        torch.save(raw_model.encoder.state_dict(), str(final_encoder_path))
+        print(f"\n[OK] 最终编码器已保存至结果目录: {final_encoder_path}")
+
+        # 同步更新共享编码器权重供后训练 (finetune) 模块直接加载
+        shared_encoder_path = base_dir / 'pretrained_encoder_final_v1.pt'
+        torch.save(raw_model.encoder.state_dict(), str(shared_encoder_path))
+        print(f"[OK] 已同步更新后训练共享编码器: {shared_encoder_path}")
+
         plot_loss_history(loss_history, best_loss, output_dir / 'pretraining_loss.png')
 
     if dist.is_initialized():

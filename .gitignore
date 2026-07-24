@@ -64,3 +64,5 @@ app/cache/positive_idx/
 
 simclr_finetune/scratch/
 simclr_finetune/results_*
+embedding_pretrain/results_*
+results_*
