@@ -1,7 +1,4 @@
 from finetune.lib.dataset import (
-    parse_msp_with_smiles,
-    peaks_to_vector,
-    preprocess_spectra,
     split_positive_by_smiles_negative_random,
     prepare_finetune_dataset
 )
@@ -24,9 +21,6 @@ __all__ = [
     'BinaryClassifier',
     'load_pretrained_encoder',
     'save_model_checkpoint',
-    'parse_msp_with_smiles',
-    'peaks_to_vector',
-    'preprocess_spectra',
     'split_positive_by_smiles_negative_random',
     'prepare_finetune_dataset',
     'train_binary_classifier',
@@ -37,3 +31,4 @@ __all__ = [
     'plot_comprehensive_results',
     'plot_confusion_matrices'
 ]
+

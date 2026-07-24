@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import numpy as np
+import pyarrow.parquet as pq
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -9,8 +10,6 @@ project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from common.data_processor import parse_msp as parse_msp_with_smiles
-from common.data_processor import clean_spectrum, peaks_to_vector, preprocess_spectra
 from common.augmentation import SpectrumAugmentation
 
 
@@ -41,9 +40,11 @@ def split_positive_by_smiles_negative_random(
     pos_val_smiles = set(shuffled_smiles[n_pos_test:n_pos_test + n_pos_val])
     pos_train_smiles = set(shuffled_smiles[n_pos_test + n_pos_val:])
     
-    pos_train_idx = [i for i in pos_indices if pos_smiles_list[i] in pos_train_smiles]
-    pos_val_idx = [i for i in pos_indices if pos_smiles_list[i] in pos_val_smiles]
-    pos_test_idx = [i for i in pos_indices if pos_smiles_list[i] in pos_test_smiles]
+    pos_idx_to_smiles = dict(zip(pos_indices, pos_smiles_list))
+    
+    pos_train_idx = [i for i in pos_indices if pos_idx_to_smiles[i] in pos_train_smiles]
+    pos_val_idx = [i for i in pos_indices if pos_idx_to_smiles[i] in pos_val_smiles]
+    pos_test_idx = [i for i in pos_indices if pos_idx_to_smiles[i] in pos_test_smiles]
     
     # 阴性随机划分
     n_neg = len(neg_indices)
@@ -69,42 +70,51 @@ def split_positive_by_smiles_negative_random(
 
 
 def prepare_finetune_dataset(
-    pos_msp_path, neg_msp_path, 
-    batch_size=128, test_size=0.15, val_size=0.15, 
-    random_state=42, use_cuda=True
+    parquet_path=None,
+    pos_msp_path=None,
+    neg_msp_path=None,
+    batch_size=128, 
+    test_size=0.15, 
+    val_size=0.15, 
+    random_state=42, 
+    use_cuda=True
 ):
-    """完整的质谱加载、清洗、转换与 DataLoader 划分流水线"""
-    pos_compounds = parse_msp_with_smiles(pos_msp_path)
-    neg_compounds = parse_msp_with_smiles(neg_msp_path)
-    
-    # 自动把 '.alpha.-pbp' 从阳性改为阴性
-    alpha_pbp_indices = [i for i, c in enumerate(pos_compounds) if c['name'] == '.alpha.-pbp']
-    if alpha_pbp_indices:
-        removed_comps = [pos_compounds[i] for i in alpha_pbp_indices]
-        pos_compounds = [comp for i, comp in enumerate(pos_compounds) if i not in alpha_pbp_indices]
-        neg_compounds.extend(removed_comps)
-        print(f"  [OK] 已将 {len(removed_comps)} 个 '.alpha.-pbp' 样本从阳性移至阴性集")
+    """
+    后训练 (Finetune) 数据加载与划分流水线。
+    读取预处理完成的合并单文件 Parquet (preprocessed_finetune.parquet)。
+    无任何 MSP 解析与兜底/回退逻辑。
+    """
+    if parquet_path is None:
+        parquet_path = Path(__file__).resolve().parent.parent / "data_source" / "preprocessed_finetune.parquet"
+        
+    parquet_file = Path(parquet_path)
+    if not parquet_file.exists():
+        raise FileNotFoundError(f"错误: 未找到后训练预处理 Parquet 文件 {parquet_file}")
 
-    pos_spectra = np.array([peaks_to_vector(clean_spectrum(c['peaks'])) for c in pos_compounds])
-    pos_smiles = np.array([c['smiles'] if c['smiles'] else c['name'] for c in pos_compounds])
-    neg_spectra = np.array([peaks_to_vector(clean_spectrum(c['peaks'])) for c in neg_compounds])
+    print(f"[Dataset] 正在从 Parquet 直接加载后训练数据集: {parquet_file.name}...")
+    table = pq.read_table(parquet_file)
+    df = table.to_pandas()
     
-    X_pos = preprocess_spectra(pos_spectra)
-    X_neg = preprocess_spectra(neg_spectra)
+    # 直接提取 561 维归一化向量与 0/1 标签
+    X = np.array(df['spectrum_vector'].tolist(), dtype=np.float32)
+    y = df['label'].values.astype(np.float32)
     
-    X = np.concatenate([X_pos, X_neg], axis=0)
-    y = np.concatenate([np.ones(len(X_pos), dtype=np.float32), np.zeros(len(X_neg), dtype=np.float32)])
-    smiles_all = np.concatenate([pos_smiles, np.array([f'neg_{i}' for i in range(len(X_neg))])])
+    pos_indices = np.where(y == 1.0)[0]
+    neg_indices = np.where(y == 0.0)[0]
     
-    pos_indices = np.arange(len(pos_spectra))
-    neg_indices = np.arange(len(pos_spectra), len(pos_spectra) + len(neg_spectra))
+    print(f"  [OK] 数据集加载成功: 总计 {len(df)} 条 (阳性 {len(pos_indices)}, 阴性 {len(neg_indices)})")
+
+    pos_smiles = df.iloc[pos_indices]['smiles'].values
+    pos_names = df.iloc[pos_indices]['name'].values
+    pos_group_keys = np.array([s if (isinstance(s, str) and len(s.strip()) > 0) else n for s, n in zip(pos_smiles, pos_names)])
     
     train_idx, val_idx, test_idx = split_positive_by_smiles_negative_random(
-        pos_indices, neg_indices, pos_smiles,
+        pos_indices, neg_indices, pos_group_keys,
         test_size=test_size, val_size=val_size, random_state=random_state
     )
     
-    sample_names_all = np.array([c['name'] for c in pos_compounds] + [c['name'] for c in neg_compounds])
+    sample_names_all = df['name'].values
+    smiles_all = np.array([s if (isinstance(s, str) and len(s.strip()) > 0) else f"neg_{i}" for i, s in enumerate(df['smiles'].values)])
     
     train_sample_names = sample_names_all[train_idx]
     val_sample_names = sample_names_all[val_idx]
@@ -120,6 +130,9 @@ def prepare_finetune_dataset(
     train_eval_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_mem)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_mem)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, pin_memory=pin_mem)
+    
+    pos_compounds = df[df['label'] == 1].to_dict('records')
+    neg_compounds = df[df['label'] == 0].to_dict('records')
     
     meta = {
         'X': X,
@@ -137,3 +150,4 @@ def prepare_finetune_dataset(
     }
     
     return train_loader, train_eval_loader, val_loader, test_loader, meta
+
