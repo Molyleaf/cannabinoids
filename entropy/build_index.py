@@ -4,13 +4,21 @@ import numpy as np
 from ms_entropy import read_one_spectrum, clean_spectrum, FlashEntropySearch
 
 
-def build_positive_index():
+def build_positive_index(msp_path: str = None):
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    msp_file = os.path.join(current_dir, "positive.msp")
-    index_dir = os.path.join(current_dir, "../app/cache/positive_idx")
+    if msp_path is None:
+        finetune_msp = os.path.join(current_dir, "../finetune/data_source/阳性-含CanonicalSMILES-5类骨架(4).msp")
+        positive_msp = os.path.join(current_dir, "positive.msp")
+        if os.path.exists(finetune_msp):
+            msp_file = finetune_msp
+        elif os.path.exists(positive_msp):
+            msp_file = positive_msp
+        else:
+            raise FileNotFoundError(f"Could not find positive msp file at {finetune_msp} or {positive_msp}")
+    else:
+        msp_file = msp_path
 
-    if not os.path.exists(msp_file):
-        raise FileNotFoundError(f"Could not find positive.msp at {msp_file}")
+    index_dir = os.path.join(current_dir, "../app/cache/positive_idx")
 
     print(f"Reading spectra from {msp_file}...")
     spectra = []
