@@ -16,7 +16,8 @@ if str(project_root) not in sys.path:
 from common.data_processor import peaks_to_vector, preprocess_spectra, clean_spectrum
 from app.recognizer import check_spectrum_similarity
 
-# Global singleton for the model
+# 单例缓存
+_ensemble_models = None
 _classifier_model = None
 
 class SpectrumEncoder(nn.Module):
@@ -40,7 +41,7 @@ class SpectrumEncoder(nn.Module):
             nn.Linear(256, hidden_dim),
             nn.LayerNorm(hidden_dim)
         )
-    
+
     def forward(self, x):
         if x.dim() == 2:
             x = x.unsqueeze(1)
@@ -57,7 +58,7 @@ class BinaryClassifier(nn.Module):
         if freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
-        
+
         self.classifier = nn.Sequential(
             nn.Linear(input_dim, 128),
             nn.LayerNorm(128),
@@ -69,7 +70,7 @@ class BinaryClassifier(nn.Module):
             nn.Dropout(0.2),
             nn.Linear(64, 1)
         )
-    
+
     def forward(self, x):
         with torch.set_grad_enabled(not all(p.requires_grad == False for p in self.encoder.parameters())):
             embed = self.encoder(x)
@@ -77,36 +78,16 @@ class BinaryClassifier(nn.Module):
         return logit.squeeze(-1)
 
 
-def get_classifier_model(safetensors_path: str = None, model_path: str = None) -> BinaryClassifier:
-    """
-    懒加载模式初始化并获取二进制风险分类模型。
-    支持从 .safetensors 或 .pt 文件读取权重。
-    """
-    global _classifier_model
-    target_path = model_path or safetensors_path
-
-    if target_path is None and _classifier_model is not None:
-        return _classifier_model
-
-    if target_path is None:
-        models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-        candidates = sorted(list(Path(models_dir).glob("*.safetensors")), key=lambda p: p.stat().st_mtime, reverse=True)
-        if candidates:
-            target_path = str(candidates[0])
-        else:
-            candidates_pt = sorted(list(Path(models_dir).glob("*.pt")), key=lambda p: p.stat().st_mtime, reverse=True)
-            if candidates_pt:
-                target_path = str(candidates_pt[0])
-            else:
-                target_path = os.path.join(models_dir, "binary_classifier_weights_20260722_211225.safetensors")
-
+def load_single_safetensors_or_pt(target_path: str) -> BinaryClassifier:
+    """从单个 .safetensors 或 .pt 加载权重构建 BinaryClassifier 模型"""
+    target_path = str(target_path)
     if not os.path.exists(target_path):
-        raise FileNotFoundError(f"Model weight file not found at {target_path}.")
+        raise FileNotFoundError(f"未找到模型权重文件: {target_path}")
 
     encoder = SpectrumEncoder(input_dim=561, hidden_dim=256)
-    model = BinaryClassifier(encoder=encoder, input_dim=256, freeze_encoder=True)
+    model = BinaryClassifier(encoder=encoder, input_dim=256, freeze_encoder=False)
 
-    if str(target_path).endswith(".pt"):
+    if target_path.endswith(".pt"):
         ckpt = torch.load(target_path, map_location="cpu", weights_only=False)
         if isinstance(ckpt, dict) and "encoder_state_dict" in ckpt and "classifier_state_dict" in ckpt:
             model.encoder.load_state_dict(ckpt["encoder_state_dict"])
@@ -122,15 +103,92 @@ def get_classifier_model(safetensors_path: str = None, model_path: str = None) -
         model.load_state_dict(state_dict)
 
     model.eval()
-    _classifier_model = model
-    return _classifier_model
+    return model
 
+
+def get_ensemble_models(models_dir: str = None, model_path: str = None) -> list:
+    """
+    懒加载获取 5-Fold .safetensors 正式集成模型列表。
+    如果指定了单个 model_path 则加载单模型并包装为列表返回。
+    """
+    global _ensemble_models
+
+    if model_path is not None:
+        return [load_single_safetensors_or_pt(model_path)]
+
+    if _ensemble_models is not None:
+        return _ensemble_models
+
+    if models_dir is None:
+        models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+
+    # 优先查找 official_ensemble_fold_*.safetensors
+    st_files = sorted(list(Path(models_dir).glob("official_ensemble_fold_*.safetensors")))
+
+    if len(st_files) == 5:
+        print(f"[Pipeline] 成功检测到 5-Fold 正式 .safetensors 模型，正在加载 Soft Voting 集成模型组...")
+        models = []
+        for st_p in st_files:
+            m = load_single_safetensors_or_pt(str(st_p))
+            models.append(m)
+        _ensemble_models = models
+        return _ensemble_models
+
+    # 回退机制：查找任意候选 .safetensors 或 .pt
+    candidates = sorted(list(Path(models_dir).glob("*.safetensors")), key=lambda p: p.stat().st_mtime, reverse=True)
+    if candidates:
+        single_path = str(candidates[0])
+    else:
+        candidates_pt = sorted(list(Path(models_dir).glob("*.pt")), key=lambda p: p.stat().st_mtime, reverse=True)
+        if candidates_pt:
+            single_path = str(candidates_pt[0])
+        else:
+            raise FileNotFoundError(f"在目录 {models_dir} 下未检测到有效的 .safetensors 或 .pt 模型权重。")
+
+    print(f"[Pipeline] 未完全找到 5-Fold 集成文件，回退加载单模型: {single_path}")
+    _ensemble_models = [load_single_safetensors_or_pt(single_path)]
+    return _ensemble_models
+
+
+def get_classifier_model(safetensors_path: str = None, model_path: str = None) -> BinaryClassifier:
+    """兼容旧接口：返回集成模型中的第一个模型"""
+    models = get_ensemble_models(model_path=model_path or safetensors_path)
+    return models[0]
+
+
+def predict_risk_ensemble(vecs_norm: np.ndarray, models: list, batch_size: int = 1024) -> np.ndarray:
+    """
+    使用 5-Fold .safetensors 集成模型进行 Soft-Voting 批量预测
+    """
+    dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    for m in models:
+        m.eval()
+        m.to(dev)
+
+    if vecs_norm.ndim == 1:
+        vecs_norm = vecs_norm[np.newaxis, :]
+
+    all_fold_probs = []
+
+    with torch.no_grad():
+        for m in models:
+            m_probs = []
+            for i in range(0, len(vecs_norm), batch_size):
+                batch_tensor = torch.tensor(vecs_norm[i:i+batch_size], dtype=torch.float32).to(dev)
+                logits = m(batch_tensor)
+                probs = torch.sigmoid(logits).cpu().numpy()
+                if probs.ndim == 0:
+                    probs = np.array([probs])
+                m_probs.extend(probs)
+            all_fold_probs.append(m_probs)
+
+    # Soft Voting: 计算 5 个模型预测概率的算术平均值
+    ensemble_probs = np.mean(all_fold_probs, axis=0)
+    return ensemble_probs
 
 
 def peaks_to_vector(peaks, mz_min=40, mz_max=600) -> np.ndarray:
-    """
-    将质谱峰 [mz, intensity] 映射为固定维度的 1D 特征向量 (561 维)。
-    """
+    """将质谱峰 [mz, intensity] 映射为固定维度的 1D 特征向量 (561 维)"""
     dim = mz_max - mz_min + 1
     vec = np.zeros(dim, dtype=np.float32)
     for p in peaks:
@@ -147,9 +205,7 @@ def peaks_to_vector(peaks, mz_min=40, mz_max=600) -> np.ndarray:
 
 
 def preprocess_spectra(vecs: np.ndarray) -> np.ndarray:
-    """
-    总离子强度(TIC)归一化与平方根变换。
-    """
+    """总离子强度(TIC)归一化与平方根变换"""
     if vecs.ndim == 1:
         vecs = vecs[np.newaxis, :]
     tic = vecs.sum(axis=1, keepdims=True)
@@ -167,17 +223,17 @@ def parse_msp_bytes(file_bytes: bytes, min_peaks: int = 1) -> list:
         text = file_bytes.decode('utf-8', errors='ignore')
     except Exception:
         text = str(file_bytes)
-        
+
     lines = text.splitlines()
     compounds = []
     current_comp = None
     in_peaks = False
-    
+
     for line in lines:
         stripped = line.strip()
         if not stripped:
             continue
-            
+
         lower = stripped.lower()
         if lower.startswith('name:'):
             if current_comp is not None and len(current_comp['peaks']) >= min_peaks:
@@ -214,10 +270,10 @@ def parse_msp_bytes(file_bytes: bytes, min_peaks: int = 1) -> list:
                                 current_comp['peaks'].append([mz, intensity])
                         except ValueError:
                             pass
-                        
+
     if current_comp is not None and len(current_comp['peaks']) >= min_peaks:
         compounds.append(current_comp)
-        
+
     return compounds
 
 
@@ -226,7 +282,7 @@ def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75,
     测样管线核心执行函数：
     1. 导入单个 msp 或 mgf 质谱，使用 parse_msp_bytes 鲁棒解析
     2. 使用 app/recognizer.py 的 check_spectrum_similarity 获取已知库匹配
-    3. 使用 safetensors / .pt 模型推断该质谱数据的风险概率
+    3. 使用 5-Fold .safetensors 集成模型完成风险概率推断 (Soft Voting)
     """
     compounds = parse_msp_bytes(file_bytes, min_peaks=1)
     if not compounds:
@@ -253,18 +309,13 @@ def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75,
     is_known_compound = bool(matched_smiles_or_bool)
     matched_smiles = matched_smiles_or_bool if isinstance(matched_smiles_or_bool, str) else ""
 
-    # 模型深度学习风险推断 (使用经 ms_entropy.clean_spectrum 滤噪清洗后的质谱峰进行 1D 特征向量转换)
+    # 模型 5-Fold .safetensors 集成风险推断
     vec = peaks_to_vector(cleaned_peaks_arr)
     vec_norm = preprocess_spectra(vec)
-    x_tensor = torch.tensor(vec_norm, dtype=torch.float32)
 
-    model = get_classifier_model(model_path=model_path)
-    dev = next(model.parameters()).device
-    x_tensor = x_tensor.to(dev)
-
-    with torch.no_grad():
-        logit = model(x_tensor)
-        risk_probability = float(torch.sigmoid(logit).item())
+    models = get_ensemble_models(model_path=model_path)
+    probs = predict_risk_ensemble(vec_norm, models)
+    risk_probability = float(probs[0])
 
     risk_level = "High Risk (高风险)" if risk_probability >= 0.5 else "Low Risk (低风险)"
 
@@ -291,11 +342,7 @@ def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75,
 def run_pipeline_batch(file_bytes: bytes, filename: str, min_similarity: float = 0.75, batch_size: int = 1024, model_path: str = None) -> dict:
     """
     测样管线批量处理函数：
-    能够高效处理包含成千上万条质谱的 MSP 或 MGF 文件。
-    1. 使用 parse_msp_bytes 鲁棒状态机解析全部质谱
-    2. 使用 FlashEntropySearch 批量检索已知库匹配
-    3. 批量使用 PyTorch safetensors / .pt 神经分类器进行风险推理
-    4. 返回总体统计数据与逐条测试详情
+    高效处理成千上万条质谱，基于 5-Fold .safetensors 集成模型进行 Soft-Voting 风险概率推断
     """
     compounds = parse_msp_bytes(file_bytes, min_peaks=1)
     if not compounds:
@@ -326,7 +373,6 @@ def run_pipeline_batch(file_bytes: bytes, filename: str, min_similarity: float =
         is_known_compound = bool(matched_smiles_or_bool)
         matched_smiles = matched_smiles_or_bool if isinstance(matched_smiles_or_bool, str) else ""
 
-        # 使用经 ms_entropy.clean_spectrum 滤噪清洗后的质谱峰进行 1D 特征向量转换
         vec = peaks_to_vector(cleaned_peaks_arr)
         vectors.append(vec)
 
@@ -341,26 +387,18 @@ def run_pipeline_batch(file_bytes: bytes, filename: str, min_similarity: float =
             "is_high_risk": False
         })
 
-    # 批量 PyTorch 风险概率推断
+    # 批量 5-Fold .safetensors Soft-Voting 推断
     if vectors:
         vecs_arr = np.array(vectors, dtype=np.float32)
         vecs_norm = preprocess_spectra(vecs_arr)
-        model = get_classifier_model(model_path=model_path)
-        dev = next(model.parameters()).device
-        
-        all_probs = []
-        with torch.no_grad():
-            for i in range(0, len(vecs_norm), batch_size):
-                batch_tensor = torch.tensor(vecs_norm[i:i+batch_size], dtype=torch.float32).to(dev)
-                logits = model(batch_tensor)
-                probs = torch.sigmoid(logits).cpu().numpy().tolist()
-                if isinstance(probs, float):
-                    probs = [probs]
-                all_probs.extend(probs)
+
+        models = get_ensemble_models(model_path=model_path)
+        all_probs = predict_risk_ensemble(vecs_norm, models, batch_size=batch_size)
 
         for detail_item, prob in zip(results_detail, all_probs):
-            detail_item["risk_probability"] = round(prob, 4)
-            detail_item["is_high_risk"] = prob >= 0.5
+            prob_val = float(prob)
+            detail_item["risk_probability"] = round(prob_val, 4)
+            detail_item["is_high_risk"] = prob_val >= 0.5
 
     # 统计汇总分析
     matched_count = sum(1 for item in results_detail if item["is_matched"])
