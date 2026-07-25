@@ -1,13 +1,14 @@
 """
-SimCLR 多卡 DDP 预训练入口 (torchrun 启动)
+SimCLR 多卡 DDP 预训练入口 (2 卡 G100 torchrun 启动)
 
 支持功能：
-1. 默认适应 4 卡 A100 80GB 计算卡 DDP 分布式训练 (4096 大 Batch Size)
-2. 直接从 Parquet 数据源读取已标准化预处理的 561 维质谱特征向量
-3. NVIDIA DALI 数据流加速与 PyTorch DistributedDataLoader 自动降级
-4. 工业级 LARS 优化器 (对齐 SimCLR 规范排除 Bias 与 GroupNorm/LayerNorm Weight Decay)
-5. 学习率线性缩放 (Linear Scaling Rule) + Linear Warmup 余弦退火
-6. DDP 全局 All-Gather NT-Xent 对比损失计算与早停收敛检测
+1. 适应 2 卡 G100 高性能 DDP 分布式训练 (默认 2048 Batch Size, 每卡 Local Batch Size 1024)
+2. 从 Parquet 数据源读取已标准化预处理的 561 维质谱特征向量 (373,330 条样本)
+3. GPU 显存全量数据预加载 (零 I/O 拷贝，零 PCIe 传输与 DataLoader 阻塞)
+4. GPU 向量化质谱增强流 (Sample-wise 强度抖动 + 静态位置张量缓存，保护拓扑结构与相对峰比例)
+5. 工业级 LARS 优化器 (对齐 SimCLR 规范排除 Bias 与 GroupNorm/LayerNorm Weight Decay)
+6. 推导的最优初始学习率 (base_lr=0.030, 8x 线性缩放后峰值 LR=0.240, 最大允许 500 Epochs / 91,000 Steps 余弦退火)
+7. DDP 全局 All-Gather 向量化 NT-Xent 对比损失计算与早停收敛检测
 """
 
 import argparse
@@ -37,16 +38,6 @@ from embedding_pretrain.lib.losses import nt_xent_loss
 from embedding_pretrain.lib.models import ProjectionHead, SimCLR, SpectrumEncoder
 from embedding_pretrain.lib.utils import ConvergenceChecker, plot_loss_history
 
-# 尝试导入 NVIDIA DALI
-try:
-    from nvidia.dali.pipeline import pipeline_def
-    import nvidia.dali.fn as fn
-    import nvidia.dali.types as types
-    from nvidia.dali.plugin.pytorch import DALIGenericIterator, LastBatchPolicy
-    HAS_DALI = True
-except ImportError:
-    HAS_DALI = False
-
 
 def load_spectra_from_parquet(data_path: Path) -> np.ndarray:
     """直接读取已预处理好的 Parquet 质谱特征向量文件"""
@@ -57,37 +48,6 @@ def load_spectra_from_parquet(data_path: Path) -> np.ndarray:
     raw_list = table['spectrum_vector'].to_pylist()
     spectra = np.array(raw_list, dtype=np.float32)
     return spectra
-
-
-# ==================== DALI Pipeline 定义 ====================
-if HAS_DALI:
-    class ExternalInputCallable:
-        def __init__(self, data, batch_size, shard_id, num_shards):
-            self.data = data
-            self.batch_size = batch_size
-            self.shard_id = shard_id
-            self.num_shards = num_shards
-            
-            total_samples = len(data)
-            per_shard = total_samples // num_shards
-            self.start_idx = shard_id * per_shard
-            self.end_idx = self.start_idx + per_shard if shard_id < num_shards - 1 else total_samples
-            self.shard_data = self.data[self.start_idx:self.end_idx]
-            self.indices = np.arange(len(self.shard_data))
-
-        def __call__(self, sample_info):
-            if sample_info.iteration_in_epoch == 0 and sample_info.idx_in_batch == 0:
-                np.random.shuffle(self.indices)
-            
-            sample_idx = (sample_info.iteration_in_epoch * self.batch_size + sample_info.idx_in_batch) % len(self.shard_data)
-            real_idx = self.indices[sample_idx]
-            return self.shard_data[real_idx]
-
-    @pipeline_def
-    def create_dali_pipeline(external_data, batch_size, shard_id, num_shards):
-        external_source = ExternalInputCallable(external_data, batch_size, shard_id, num_shards)
-        spectra = fn.external_source(source=external_source, dtype=types.FLOAT, batch=False)
-        return spectra
 
 
 class LinearWarmupCosineAnnealingLR:
@@ -148,18 +108,17 @@ def main():
     base_dir = Path(__file__).resolve().parent
     default_data_path = base_dir / "data_source" / "preprocessed_spectra.parquet"
 
-    parser = argparse.ArgumentParser(description="SimCLR 4卡 A100 DDP 对比学习预训练")
+    parser = argparse.ArgumentParser(description="SimCLR 2卡 G100 DDP 对比学习预训练")
     parser.add_argument("--data_path", type=str, default=str(default_data_path), help="预训练 Parquet 数据路径")
-    parser.add_argument("--global_batch_size", type=int, default=4096, help="全局 Batch Size (默认 4096，适应 4 卡 A100)")
-    parser.add_argument("--base_lr", type=float, default=0.3, help="基础学习率 (用于 256 Batch 下的基准)")
+    parser.add_argument("--global_batch_size", type=int, default=2048, help="全局 Batch Size (默认 2048，适应 2 卡 G100 每卡 1024)")
+    parser.add_argument("--base_lr", type=float, default=0.030, help="基础学习率 (默认 0.030, 8x 线性缩放后 Peak LR=0.240)")
     parser.add_argument("--warmup_epochs", type=int, default=10, help="Linear Warmup 轮数")
-    parser.add_argument("--max_epochs", type=int, default=500, help="最大训练轮数")
+    parser.add_argument("--max_epochs", type=int, default=500, help="最大允许训练轮数 (默认 500 Epochs)")
     parser.add_argument("--temperature", type=float, default=0.07, help="NT-Xent 温度系数")
     parser.add_argument("--weight_decay", type=float, default=1e-6, help="LARS Weight Decay")
     parser.add_argument("--patience", type=int, default=30, help="早停耐心值 (Patience)")
-    parser.add_argument("--max_samples", type=int, default=None, help="限制样本数量 (用于本地快速测试，默认全量)")
+    parser.add_argument("--max_samples", type=int, default=None, help="限制样本数量 (用于本地测试，默认全量)")
     parser.add_argument("--output_dir", type=str, default=str(base_dir), help="模型输出保存目录")
-    parser.add_argument("--use_dali", action="store_true", help="启用 NVIDIA DALI GPU 加载器")
     args = parser.parse_args()
 
     rank, world_size, local_rank, device = setup_ddp()
@@ -176,13 +135,14 @@ def main():
     if is_main_process:
         output_dir.mkdir(parents=True, exist_ok=True)
         print("=" * 60)
-        print("SimCLR 多卡 DDP 对比学习预训练 (4096 大 Batch + DALI + LARS)")
+        print("SimCLR 2 卡 G100 DDP 对比学习预训练 (GPU 显存全预载 + 向量化掩码 Loss + LARS)")
         print("=" * 60)
         print(f"Rank: {rank}/{world_size} | Device: {device}")
         print(f"数据文件: {data_path}")
         print(f"输出目录: {output_dir}")
         print(f"全局 Batch Size: {args.global_batch_size}")
         print(f"每卡 Local Batch Size: {args.global_batch_size // world_size}")
+        print(f"最大允许 Epochs: {args.max_epochs}")
 
     # 从 Parquet 加载数据集
     spectra = load_spectra_from_parquet(data_path)
@@ -194,40 +154,24 @@ def main():
 
     local_batch_size = max(1, args.global_batch_size // world_size)
 
-    # 验证是否启用 DALI
-    use_dali = args.use_dali and HAS_DALI and (device.type == 'cuda')
-    if is_main_process:
-        if use_dali:
-            print("[Data Pipeline] 成功启用 NVIDIA DALI GPU Data Loader")
-        else:
-            print("[Data Pipeline] 使用 PyTorch DistributedDataLoader")
-
-    dali_iter = None
-    if use_dali:
-        pipe = create_dali_pipeline(
-            external_data=spectra,
-            batch_size=local_batch_size,
-            shard_id=rank,
-            num_shards=world_size,
-            num_threads=4,
-            device_id=local_rank
-        )
-        pipe.build()
-        dali_iter = DALIGenericIterator(
-            pipe,
-            output_map=["spectra"],
-            last_batch_policy=LastBatchPolicy.DROP,
-            auto_reset=True
-        )
+    # 极速优化：全量数据集直接预加载驻留 GPU 显存 (彻底消除 CPU-GPU PCIe 传输与 PyTorch DataLoader 开销)
+    if device.type == 'cuda':
+        if is_main_process:
+            print("[Data Pipeline] 将数据集一次性预加载驻留 GPU 显存 (零 CPU 传输延迟)...")
+        full_tensor = torch.from_numpy(spectra).to(device, non_blocking=True)
+        # 多卡 DDP 样本切分 (Strided shard)
+        rank_spectra = full_tensor[rank::world_size]
+        use_gpu_direct_loader = True
     else:
+        use_gpu_direct_loader = False
         dataset = TensorDataset(torch.from_numpy(spectra))
-        sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=True)
+        sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=True) if world_size > 1 else None
         dataloader = DataLoader(
             dataset,
             batch_size=local_batch_size,
             sampler=sampler,
-            num_workers=4 if device.type == 'cuda' else 0,
-            pin_memory=(device.type == 'cuda'),
+            shuffle=(sampler is None),
+            num_workers=0,
             drop_last=True
         )
 
@@ -260,7 +204,7 @@ def main():
         base_lr=scaled_lr
     )
 
-    # 统一数据增强流水线
+    # 统一 GPU 向量化数据增强流水线
     augmenter = SpectrumAugmentation(mode='pretrain')
     
     # 拟合收敛检测器
@@ -279,45 +223,71 @@ def main():
     start_time = datetime.now()
 
     for epoch in range(1, args.max_epochs + 1):
-        if use_dali:
-            dali_iter.reset()
-            batch_iterable = dali_iter
-        else:
-            sampler.set_epoch(epoch)
-            batch_iterable = dataloader
-
         current_lr = lr_scheduler.step(epoch)
         model.train()
         epoch_loss = 0.0
         n_batches = 0
 
-        pbar = tqdm(batch_iterable, desc=f'Epoch {epoch:3d}/{args.max_epochs}', disable=not is_main_process)
-        
-        for item in pbar:
-            if use_dali:
-                spec_batch = item[0]["spectra"].to(device, non_blocking=True)
-            else:
-                spec_batch = item[0].to(device, non_blocking=True)
+        if use_gpu_direct_loader:
+            # 在 GPU 显存内生成零延迟打乱索引
+            perm = torch.randperm(len(rank_spectra), device=device)
+            shuffled_spectra = rank_spectra[perm]
+            num_batches = len(shuffled_spectra) // local_batch_size
+            
+            pbar = tqdm(range(num_batches), desc=f'Epoch {epoch:3d}/{args.max_epochs}', disable=not is_main_process)
+            
+            for b_idx in pbar:
+                spec_batch = shuffled_spectra[b_idx * local_batch_size : (b_idx + 1) * local_batch_size]
 
-            # 在 GPU 上执行 Batch 特征增强
-            view1 = augmenter(spec_batch)
-            view2 = augmenter(spec_batch)
-            views = torch.cat([view1, view2], dim=0)
+                # 在 GPU 上高效执行 2D Batch 矩阵特征增强
+                view1 = augmenter(spec_batch)
+                view2 = augmenter(spec_batch)
+                views = torch.cat([view1, view2], dim=0)
 
-            optimizer.zero_grad(set_to_none=True)
+                optimizer.zero_grad(set_to_none=True)
 
-            if scaler is not None:
-                with torch.amp.autocast('cuda'):
+                if scaler is not None:
+                    with torch.amp.autocast('cuda'):
+                        _, z = model(views)
+                        z1, z2 = torch.chunk(z, 2, dim=0)
+                        loss = nt_xent_loss(z1, z2, temperature=args.temperature, use_ddp=(world_size > 1))
+                    
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
                     _, z = model(views)
                     z1, z2 = torch.chunk(z, 2, dim=0)
                     loss = nt_xent_loss(z1, z2, temperature=args.temperature, use_ddp=(world_size > 1))
-                
-                scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                scaler.step(optimizer)
-                scaler.update()
-            else:
+                    
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    optimizer.step()
+
+                epoch_loss += loss.item()
+                n_batches += 1
+
+                if is_main_process:
+                    pbar.set_postfix({'loss': f'{loss.item():.4f}', 'lr': f'{current_lr:.2e}'})
+
+        else:
+            if sampler is not None:
+                sampler.set_epoch(epoch)
+
+            pbar = tqdm(dataloader, desc=f'Epoch {epoch:3d}/{args.max_epochs}', disable=not is_main_process)
+            
+            for (batch_data,) in pbar:
+                spec_batch = batch_data.to(device, non_blocking=True)
+
+                # 在 GPU 上高效执行 2D Batch 矩阵特征增强
+                view1 = augmenter(spec_batch)
+                view2 = augmenter(spec_batch)
+                views = torch.cat([view1, view2], dim=0)
+
+                optimizer.zero_grad(set_to_none=True)
+
                 _, z = model(views)
                 z1, z2 = torch.chunk(z, 2, dim=0)
                 loss = nt_xent_loss(z1, z2, temperature=args.temperature, use_ddp=(world_size > 1))
@@ -326,11 +296,11 @@ def main():
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
-            epoch_loss += loss.item()
-            n_batches += 1
+                epoch_loss += loss.item()
+                n_batches += 1
 
-            if is_main_process:
-                pbar.set_postfix({'loss': f'{loss.item():.4f}', 'lr': f'{current_lr:.2e}'})
+                if is_main_process:
+                    pbar.set_postfix({'loss': f'{loss.item():.4f}', 'lr': f'{current_lr:.2e}'})
 
         avg_loss = epoch_loss / max(1, n_batches)
 

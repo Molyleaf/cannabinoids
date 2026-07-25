@@ -25,7 +25,6 @@ class GatherLayer(torch.autograd.Function):
     def backward(ctx, grad_output):
         input_tensor, = ctx.saved_tensors
         rank = dist.get_rank()
-        world_size = dist.get_world_size()
         batch_size = input_tensor.shape[0]
 
         # 仅截取属于本 rank 的梯度分量
@@ -35,7 +34,7 @@ class GatherLayer(torch.autograd.Function):
 
 def nt_xent_loss(z1, z2, temperature=0.07, use_ddp=False):
     """
-    NT-Xent 对比学习损失 (支持 DDP 全局 All-Gather 与数值稳定优化版)
+    NT-Xent 对比学习损失 (全 GPU 向量化与 All-Gather 稳定加速版)
     """
     z1 = safe_l2_normalize(z1)
     z2 = safe_l2_normalize(z2)
@@ -59,11 +58,11 @@ def nt_xent_loss(z1, z2, temperature=0.07, use_ddp=False):
             labels2 = torch.arange(local_batch_size, device=z1.device) + rank * local_batch_size + total_large
             labels = torch.cat([labels2, labels1], dim=0)
             
-            # 排除自对比掩码
+            # 全向量化排除自对比掩码 (消除 Python 原生 for 循环 CPU 阻塞)
             mask = torch.zeros((2 * local_batch_size, 2 * total_large), dtype=torch.bool, device=z1.device)
-            for i in range(local_batch_size):
-                mask[i, rank * local_batch_size + i] = True
-                mask[local_batch_size + i, total_large + rank * local_batch_size + i] = True
+            row_idx = torch.arange(local_batch_size, device=z1.device)
+            mask[row_idx, rank * local_batch_size + row_idx] = True
+            mask[local_batch_size + row_idx, total_large + rank * local_batch_size + row_idx] = True
                 
             sim_matrix = sim_matrix.masked_fill(mask, -1e4)
             loss = F.cross_entropy(sim_matrix, labels)
