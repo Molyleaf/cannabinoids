@@ -33,7 +33,20 @@ class ConvergenceChecker:
         return self.epochs_no_improve >= self.patience
 
 def plot_loss_history(loss_history, best_loss, output_path):
-    """绘制并保存损失曲线"""
+    """绘制并保存损失曲线 (同时保存 CSV 文件与 PNG 图片)"""
+    import pandas as pd
+    from pathlib import Path
+
+    out_p = Path(output_path)
+    csv_path = out_p.with_suffix('.csv')
+    
+    df = pd.DataFrame({
+        'epoch': list(range(1, len(loss_history) + 1)),
+        'loss': loss_history
+    })
+    df.to_csv(csv_path, index=False)
+    print(f"[OK] 已导出预训练 Loss 数据至 CSV: {csv_path}")
+
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, len(loss_history) + 1), loss_history, 'b-', alpha=0.7)
     plt.axhline(y=best_loss, color='r', linestyle='--', alpha=0.5,
@@ -44,5 +57,6 @@ def plot_loss_history(loss_history, best_loss, output_path):
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(str(output_path), dpi=150)
-    plt.show()
+    plt.savefig(str(out_p), dpi=150)
+    plt.close()
+

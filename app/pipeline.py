@@ -14,11 +14,16 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from common.data_processor import peaks_to_vector, preprocess_spectra, clean_spectrum
-from app.recognizer import check_spectrum_similarity
+from app.recognizer import check_spectrum_similarity, search_entropy_detail
 
 # 单例缓存
 _ensemble_models = None
 _classifier_model = None
+_multi_class_model = None
+_multi_class_names = [
+    '芬太尼', '卡西酮', '大麻素', 'Arylcyclohexylamines',
+    'Benzodiazepines', 'Nitazenes', 'Opiates', 'Phenethylamines', 'Tryptamines'
+]
 
 class SpectrumEncoder(nn.Module):
     def __init__(self, input_dim=561, hidden_dim=256):
@@ -76,6 +81,139 @@ class BinaryClassifier(nn.Module):
             embed = self.encoder(x)
         logit = self.classifier(embed)
         return logit.squeeze(-1)
+
+
+# 多分类模型网络结构定义
+class MultiClassSpectrumEncoder(nn.Module):
+    def __init__(self, input_dim=561, hidden_dim=256):
+        super().__init__()
+        self.conv_block = nn.Sequential(
+            nn.Conv1d(1, 64, kernel_size=7, padding=3),
+            nn.BatchNorm1d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+            nn.Conv1d(64, 128, kernel_size=5, padding=2),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+            nn.Conv1d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool1d(1)
+        )
+        self.fc = nn.Sequential(
+            nn.Linear(256, hidden_dim),
+            nn.BatchNorm1d(hidden_dim)
+        )
+    
+    def forward(self, x):
+        if x.dim() == 2:
+            x = x.unsqueeze(1)
+        h = self.conv_block(x).squeeze(-1)
+        embed = self.fc(h)
+        return torch.nn.functional.normalize(embed, p=2, dim=1)
+
+
+class MultiClassClassifier(nn.Module):
+    def __init__(self, encoder, num_classes=9, input_dim=256, freeze_encoder=True):
+        super().__init__()
+        self.encoder = encoder
+        if freeze_encoder:
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+        self.classifier = nn.Sequential(
+            nn.Linear(input_dim, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.3),
+            nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            nn.Linear(128, num_classes)
+        )
+
+    def forward(self, x):
+        embed = self.encoder(x)
+        logits = self.classifier(embed)
+        return logits
+
+
+def get_multi_class_model(model_path: str = None):
+    """加载多分类模型 PyTorch 权重"""
+    global _multi_class_model, _multi_class_names
+
+    if _multi_class_model is not None and model_path is None:
+        return _multi_class_model, _multi_class_names
+
+    if model_path is None:
+        multi_dir = project_root / "multi_classifier"
+        candidates = sorted(list(multi_dir.glob("best_multi_class_model_*.pt")), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not candidates:
+            candidates = sorted(list(multi_dir.glob("*.pt")), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not candidates:
+            raise FileNotFoundError(f"在 {multi_dir} 下未找到多分类模型权重 .pt 文件")
+        model_path = str(candidates[0])
+
+    print(f"[Pipeline] 正在加载多分类模型权重: {model_path}")
+    checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
+
+    class_names = _multi_class_names
+    if isinstance(checkpoint, dict) and 'config' in checkpoint and 'class_names' in checkpoint['config']:
+        class_names = checkpoint['config']['class_names']
+
+    num_classes = len(class_names)
+    encoder = MultiClassSpectrumEncoder(input_dim=561, hidden_dim=256)
+    model = MultiClassClassifier(encoder=encoder, num_classes=num_classes, freeze_encoder=False)
+
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        m_state = checkpoint['model_state_dict']
+        if 'encoder_state_dict' in m_state and 'classifier_state_dict' in m_state:
+            model.encoder.load_state_dict(m_state['encoder_state_dict'])
+            model.classifier.load_state_dict(m_state['classifier_state_dict'])
+        else:
+            model.load_state_dict(m_state)
+    elif isinstance(checkpoint, dict) and 'encoder_state_dict' in checkpoint:
+        model.encoder.load_state_dict(checkpoint['encoder_state_dict'])
+        model.classifier.load_state_dict(checkpoint['classifier_state_dict'])
+    elif isinstance(checkpoint, dict):
+        model.load_state_dict(checkpoint)
+    else:
+        model = checkpoint
+
+    model.eval()
+    _multi_class_model = model
+    _multi_class_names = class_names
+    return model, class_names
+
+
+def predict_multi_class(vec_norm: np.ndarray, model_path: str = None) -> dict:
+    """多分类模型概率推断"""
+    model, class_names = get_multi_class_model(model_path=model_path)
+    dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(dev)
+
+    if vec_norm.ndim == 1:
+        vec_norm = vec_norm[np.newaxis, :]
+
+    with torch.no_grad():
+        batch_tensor = torch.tensor(vec_norm, dtype=torch.float32).to(dev)
+        logits = model(batch_tensor)
+        probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+
+    top_idx = int(np.argmax(probs))
+    top_class = class_names[top_idx]
+    top_prob = float(probs[top_idx])
+
+    prob_dict = {class_names[i]: round(float(probs[i]), 4) for i in range(len(class_names))}
+
+    return {
+        "pred_class": top_class,
+        "confidence": round(top_prob, 4),
+        "confidence_percentage": f"{top_prob * 100:.2f}%",
+        "probabilities": prob_dict,
+        "is_positive": True  # 属于阳性毒品多分类模型
+    }
 
 
 def load_single_safetensors_or_pt(target_path: str) -> BinaryClassifier:
@@ -277,16 +415,23 @@ def parse_msp_bytes(file_bytes: bytes, min_peaks: int = 1) -> list:
     return compounds
 
 
-def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75, model_path: str = None) -> dict:
+def run_pipeline(
+    file_bytes: bytes,
+    filename: str,
+    model_type: str = "binary",
+    min_similarity: float = 0.90,
+    model_path: str = None
+) -> dict:
     """
     测样管线核心执行函数：
-    1. 导入单个 msp 或 mgf 质谱，使用 parse_msp_bytes 鲁棒解析
-    2. 使用 app/recognizer.py 的 check_spectrum_similarity 获取已知库匹配
-    3. 使用 5-Fold .safetensors 集成模型完成风险概率推断 (Soft Voting)
+    1. 导入质谱 (MSP / MGF) 格式数据并清洗
+    2. 根据选择模型类型进行推理 (二分类 finetune 或 多分类 multi_classifier)
+    3. 若模型判定为阳性 (Positive)，自动触发 @entropy 库相似度检索 (阈值 0.90)
+    4. 相似度 > 0.90 时返回已知分子的 SMILES 结构式
     """
     compounds = parse_msp_bytes(file_bytes, min_peaks=1)
     if not compounds:
-        raise ValueError(f"Failed to parse any valid mass spectrum from {filename}.")
+        raise ValueError(f"无法从 {filename} 解析出有效的质谱数据。")
 
     comp = compounds[0]
     spec_name = comp['name']
@@ -301,42 +446,85 @@ def run_pipeline(file_bytes: bytes, filename: str, min_similarity: float = 0.75,
         "peaks": cleaned_peaks_arr
     }
 
-    # 已知库熵检索匹配
-    matched_smiles_or_bool = check_spectrum_similarity(
-        query_dict,
-        min_similarity=min_similarity
-    )
-    is_known_compound = bool(matched_smiles_or_bool)
-    matched_smiles = matched_smiles_or_bool if isinstance(matched_smiles_or_bool, str) else ""
-
-    # 模型 5-Fold .safetensors 集成风险推断
+    # 特征向量化
     vec = peaks_to_vector(cleaned_peaks_arr)
     vec_norm = preprocess_spectra(vec)
 
-    models = get_ensemble_models(model_path=model_path)
-    probs = predict_risk_ensemble(vec_norm, models)
-    risk_probability = float(probs[0])
+    is_positive = False
+    model_inference_data = {}
 
-    risk_level = "High Risk (高风险)" if risk_probability >= 0.5 else "Low Risk (低风险)"
+    if model_type == "multi":
+        multi_res = predict_multi_class(vec_norm, model_path=model_path)
+        is_positive = True
+        model_inference_data = {
+            "model_type": "multi",
+            "model_name": "多分类模型 (@multi_classifier)",
+            "pred_class": multi_res["pred_class"],
+            "confidence": multi_res["confidence"],
+            "confidence_percentage": multi_res["confidence_percentage"],
+            "probabilities": multi_res["probabilities"],
+            "is_positive": True,
+            "status_text": f"阳性 🎯 (类别: {multi_res['pred_class']})"
+        }
+    else:
+        models = get_ensemble_models(model_path=model_path)
+        probs = predict_risk_ensemble(vec_norm, models)
+        risk_probability = float(probs[0])
+        is_positive = risk_probability >= 0.50
+
+        model_inference_data = {
+            "model_type": "binary",
+            "model_name": "二分类模型 (@finetune 5-Fold 集成)",
+            "risk_probability": round(risk_probability, 4),
+            "risk_percentage": f"{risk_probability * 100:.2f}%",
+            "risk_level": "High Risk (高风险阳性)" if is_positive else "Low Risk (低风险阴性)",
+            "is_positive": is_positive,
+            "status_text": "阳性 🎯 (高风险)" if is_positive else "阴性 🛡️ (低风险)"
+        }
+
+    # 如果模型表征为阳性，进入 @entropy 信息熵检索
+    entropy_match_result = {
+        "is_triggered": is_positive,
+        "is_matched": False,
+        "similarity_score": 0.0,
+        "matched_smiles": "",
+        "raw_matched_smiles": "",
+        "matched_name": "",
+        "min_similarity_threshold": min_similarity,
+        "message": "阴性样本未触发 @entropy 熵检索" if not is_positive else ""
+    }
+
+    if is_positive:
+        search_res = search_entropy_detail(
+            query_dict,
+            min_similarity=min_similarity
+        )
+        entropy_match_result.update({
+            "is_matched": search_res["is_matched"],
+            "similarity_score": search_res["similarity_score"],
+            "matched_smiles": search_res["matched_smiles"],
+            "raw_matched_smiles": search_res["raw_matched_smiles"],
+            "matched_name": search_res["matched_name"],
+            "message": f"已知分子相似度 {search_res['similarity_score']:.4f} > {min_similarity:.2f}，成功命中并返回 SMILES 结构式！" if search_res["is_matched"] else f"与已知库最高相似度为 {search_res['similarity_score']:.4f} (≤ {min_similarity:.2f})，未命中已知分子 SMILES"
+        })
 
     return {
         "filename": filename,
         "name": spec_name,
         "num_cleaned_peaks": len(cleaned_peaks_arr),
         "precursor_mz": precursor_mz,
+        "model_type_selected": model_type,
+        "is_positive": is_positive,
+        "model_inference": model_inference_data,
+        "entropy_match": entropy_match_result,
         "known_library_match": {
-            "is_matched": is_known_compound,
-            "matched_smiles": matched_smiles,
+            "is_matched": entropy_match_result["is_matched"],
+            "matched_smiles": entropy_match_result["matched_smiles"],
             "min_similarity_threshold": min_similarity
-        },
-        "model_inference": {
-            "risk_probability": round(risk_probability, 4),
-            "risk_percentage": f"{risk_probability * 100:.2f}%",
-            "risk_level": risk_level,
-            "is_high_risk": risk_probability >= 0.5
         },
         "peaks": cleaned_peaks_arr.tolist()
     }
+
 
 
 def run_pipeline_batch(file_bytes: bytes, filename: str, min_similarity: float = 0.75, batch_size: int = 1024, model_path: str = None) -> dict:
