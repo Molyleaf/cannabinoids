@@ -4,3 +4,4 @@
 port = 8001
 baseUrlPath = "cannabinoids"
 address = "0.0.0.0"
+corsAllowedOrigins = ["https://chem.warships.cn", "https://mspredict.com"]

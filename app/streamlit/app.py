@@ -36,12 +36,12 @@ st.set_page_config(
 if "language" not in st.session_state:
     st.session_state.language = "en_US"
 
-st.sidebar.header("🌐 Language / 语言")
+st.sidebar.header("🌐 " + _("Language"))
 lang_options = {"English": "en_US", "简体中文": "zh_CN"}
 current_idx = 0 if st.session_state.language == "en_US" else 1
 
 selected_lang_label = st.sidebar.selectbox(
-    "Language Selector",
+    _("Language Selector"),
     options=list(lang_options.keys()),
     index=current_idx,
     label_visibility="collapsed"
@@ -154,15 +154,15 @@ if uploaded_file is not None:
                 user_email=user_email
             )
 
-            st.success("🎉 Analysis complete / 分析完成！")
+            st.success("🎉 " + _("Analysis complete!"))
 
             # 隐私与样本复核状态提示
             if not privacy_res["authorized"]:
-                st.info("🔒 **隐私模式已生效**：当前仅显示本次检测结论，未在系统内留存任何数据。")
+                st.info("🔒 **" + _("Privacy Mode Active") + "**：" + _("Only current detection results are displayed; no data is retained in the system."))
             elif privacy_res["is_uncertain"]:
-                st.warning(f"⚠️ **边界样本复核提示**：本次预测概率为 **{pred_prob:.2f}**，处于模型的不确定区间 [0.3, 0.7]。已为您存入待标注队列，并将由专家进行后续复核。")
+                st.warning("⚠️ **" + _("Boundary Sample Review Notice") + f"**：{_('Predicted probability is')} **{pred_prob:.2f}**，{_('falling in model uncertainty interval [0.3, 0.7]. Saved to pending review queue for expert review.')}")
             else:
-                st.success(f"✅ **检测完成**：模型预测置信度较高 ({pred_prob:.2f})，结果已归档用于模型性能改进。")
+                st.success("✅ **" + _("Detection Complete") + f"**：{_('Model prediction confidence is high')} ({pred_prob:.2f})，{_('results archived for model performance improvement.')}")
 
             st.markdown("---")
 
@@ -176,16 +176,17 @@ if uploaded_file is not None:
                 st.metric(_("Cleaned Peak Count"), result["num_cleaned_peaks"])
 
             with col3:
+                status_disp = _(model_inf["status_text"]) if model_type_key == "binary" else f"{_('Positive 🎯')} ({_('Category')}: {_(model_inf['pred_class'])})"
                 if result["is_positive"]:
-                    st.metric(_("Model Determination"), model_inf["status_text"], delta=_("Positive (Positive)"), delta_color="inverse")
+                    st.metric(_("Model Determination"), status_disp, delta=_("Positive"), delta_color="inverse")
                 else:
-                    st.metric(_("Model Determination"), model_inf["status_text"], delta=_("Negative (Negative)"), delta_color="normal")
+                    st.metric(_("Model Determination"), status_disp, delta=_("Negative"), delta_color="normal")
 
             with col4:
                 if entropy_match["is_matched"]:
                     st.metric(_("Known Molecule Similarity"), f"{entropy_match['similarity_score']:.4f}", delta=_("Matched SMILES"), delta_color="normal")
                 elif entropy_match["is_triggered"]:
-                    st.metric(_("Known Molecule Similarity"), f"{entropy_match['similarity_score']:.4f}", delta=_("Below 0.90 Threshold"), delta_color="off")
+                    st.metric(_("Known Molecule Similarity"), f"{entropy_match['similarity_score']:.4f}", delta=f"{_('Below Threshold')} ({min_similarity:.2f})", delta_color="off")
                 else:
                     st.metric(_("Known Molecule Similarity"), _("Not Triggered"), delta=_("Negative Sample (Skipped)"), delta_color="off")
 
@@ -203,30 +204,30 @@ if uploaded_file is not None:
             with tab1:
                 st.subheader(_("1. Model Inference Result"))
                 if model_type_key == "binary":
-                    st.write(f"- **{_('Evaluated Model')}**：{model_inf['model_name']}")
+                    st.write(f"- **{_('Evaluated Model')}**：{_(model_inf['model_name'])}")
                     st.write(f"- **{_('Positive/High Risk Probability')}**：`{model_inf['risk_probability']}` ({model_inf['risk_percentage']})")
-                    st.write(f"- **{_('Determination Result')}**：**{model_inf['risk_level']}**")
+                    st.write(f"- **{_('Determination Result')}**：**{_(model_inf['risk_level'])}**")
                 else:
-                    st.write(f"- **{_('Evaluated Model')}**：{model_inf['model_name']}")
-                    st.write(f"- **{_('Predicted Category')}**：**{model_inf['pred_class']}**")
+                    st.write(f"- **{_('Evaluated Model')}**：{_(model_inf['model_name'])}")
+                    st.write(f"- **{_('Predicted Category')}**：**{_(model_inf['pred_class'])}**")
                     st.write(f"- **{_('Category Confidence')}**：`{model_inf['confidence']}` ({model_inf['confidence_percentage']})")
 
                 st.markdown("---")
                 st.subheader(_("2. Known Library Match Result"))
                 if not entropy_match["is_triggered"]:
-                    st.info("当前样本经模型判定为阴性，未触发已知库检索。")
+                    st.info(_("Current sample evaluated as negative by model, library search not triggered."))
                 else:
                     st.write(f"- **{_('Highest Similarity Score')}**：`{entropy_match['similarity_score']:.4f}`")
                     st.write(f"- **{_('Matching Threshold')}**：`{min_similarity:.2f}`")
 
                     if entropy_match["is_matched"]:
-                        st.success(f"成功匹配到已知分子 (相似度 {entropy_match['similarity_score']:.4f} > {min_similarity:.2f})")
+                        st.success(f"{_('Successfully matched known molecule')} ({_('Similarity')} {entropy_match['similarity_score']:.4f} > {min_similarity:.2f})")
                         if entropy_match["matched_name"]:
                             st.write(f"- **{_('Compound Name')}**：`{entropy_match['matched_name']}`")
                         st.write(f"- **{_('Known Molecule SMILES Structure')}**：")
                         st.code(entropy_match["matched_smiles"], language="text")
                     else:
-                        st.warning(f"样本表征为阳性，但最高相似度为 `{entropy_match['similarity_score']:.4f}` (小于等于 {min_similarity:.2f})。未返回 SMILES 结构。此样本可能为新型阳性衍生化合物。")
+                        st.warning(f"{_('Sample predicted positive, but max similarity is')} `{entropy_match['similarity_score']:.4f}` ({_('<= threshold')} {min_similarity:.2f})。{_('No SMILES returned. Sample may be a novel positive derivative.')}")
 
             with tab2:
                 st.subheader(_("Spectrum Profile") + " (m/z vs Relative Intensity %)")
@@ -240,9 +241,9 @@ if uploaded_file is not None:
 
                     ax.vlines(x=mzs, ymin=0, ymax=norm_int, linewidth=1.5)
                     ax.scatter(mzs, norm_int, s=10)
-                    ax.set_xlabel("m/z")
-                    ax.set_ylabel("Relative Intensity (%)")
-                    ax.set_title(f"Cleaned Spectrum Profile: {filename} ({len(peaks)} peaks)")
+                    ax.set_xlabel(_("m/z"))
+                    ax.set_ylabel(_("Relative Intensity (%)"))
+                    ax.set_title(f"{_('Cleaned Spectrum Profile')}: {filename} ({len(peaks)} {_('peaks')})")
                     ax.grid(True, linestyle="--", alpha=0.5)
 
                     st.pyplot(fig)
@@ -252,12 +253,13 @@ if uploaded_file is not None:
                 if model_type_key == "multi":
                     probs_dict = model_inf["probabilities"]
                     classes = list(probs_dict.keys())
+                    translated_classes = [_(c) for c in classes]
                     probs_vals = [probs_dict[c] * 100 for c in classes]
 
                     fig_bar, ax_bar = plt.subplots(figsize=(8, 4))
-                    bars = ax_bar.barh(classes, probs_vals)
-                    ax_bar.set_xlabel("Probability (%)")
-                    ax_bar.set_title("Multi-Classifier Prediction Probabilities")
+                    bars = ax_bar.barh(translated_classes, probs_vals)
+                    ax_bar.set_xlabel(_("Probability (%)"))
+                    ax_bar.set_title(_("Multi-Classifier Prediction Probabilities"))
                     ax_bar.set_xlim(0, 100)
                     for bar in bars:
                         w = bar.get_width()
@@ -267,18 +269,18 @@ if uploaded_file is not None:
                     st.pyplot(fig_bar)
                 else:
                     risk_p = model_inf["risk_probability"] * 100
-                    st.write(f"**阳性概率**：`{risk_p:.2f}%`")
+                    st.write(f"**{_('Positive Probability')}**：`{risk_p:.2f}%`")
                     st.progress(int(min(max(risk_p, 0), 100)))
 
             with tab4:
                 st.subheader(_("Data Sharing & Sample Management Details"))
-                st.write(f"- **{_('Data Sharing Authorization')}**：`{'已同意共享' if user_consent else '未授权 (隐私保护)'}`")
+                st.write(f"- **{_('Data Sharing Authorization')}**：`{_('Authorized') if user_consent else _('Not Authorized (Privacy Protected)')}`")
                 if user_consent:
-                    st.write(f"- **{_('Contributor Signature')}**：`{user_name if user_name else '匿名贡献者'}`")
-                    st.write(f"- **{_('Notification Email')}**：`{user_email if user_email else '未提供'}`")
-                st.write(f"- **模型预测概率 ($P$)**：`{pred_prob:.4f}`")
+                    st.write(f"- **{_('Contributor Signature')}**：`{user_name if user_name else _('Anonymous Contributor')}`")
+                    st.write(f"- **{_('Notification Email')}**：`{user_email if user_email else _('Not Provided')}`")
+                st.write(f"- **{_('Model Prediction Probability ($P$)')}**：`{pred_prob:.4f}`")
                 st.write(f"- **{_('Uncertainty Interval')}**：`[0.3, 0.7]`")
-                st.write(f"- **{_('Sample Classification')}**：`{'不确定区间 (待人工复核)' if privacy_res['is_uncertain'] else '高置信度区间'}`")
+                st.write(f"- **{_('Sample Classification')}**：`{_('Uncertainty Interval (Pending Manual Review)') if privacy_res['is_uncertain'] else _('High Confidence Interval')}`")
 
                 stats = get_queue_stats()
                 col_s1, col_s2 = st.columns(2)
@@ -291,9 +293,9 @@ if uploaded_file is not None:
                 st.subheader(_("Cleaned Raw Peak Data"))
                 st.dataframe(
                     peaks,
-                    column_config={"0": "m/z", "1": "Intensity"},
-                    use_container_width=True
+                    column_config={"0": "m/z", "1": _("Intensity")},
+                    width="stretch"
                 )
 
         except Exception as e:
-            st.error(f"❌ 分析过程发生错误：{str(e)}")
+            st.error("❌ " + _("Error during analysis:") + f" {str(e)}")

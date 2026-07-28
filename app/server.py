@@ -13,7 +13,8 @@ if __name__ == "__main__":
         str(app_path),
         "--server.port=8001",
         "--server.address=0.0.0.0",
-        "--server.baseUrlPath=cannabinoids"
+        "--server.baseUrlPath=cannabinoids",
+        "--server.corsAllowedOrigins=[\"https://chem.warships.cn\", \"https://mspredict.com\"]"
     ]
     print(f"Starting Streamlit server on http://0.0.0.0:8001/cannabinoids (app: {app_path})...")
     subprocess.run(cmd)

@@ -458,13 +458,13 @@ def run_pipeline(
         is_positive = True
         model_inference_data = {
             "model_type": "multi",
-            "model_name": "多分类模型 (@multi_classifier)",
+            "model_name": "Multi-class Model (@multi_classifier)",
             "pred_class": multi_res["pred_class"],
             "confidence": multi_res["confidence"],
             "confidence_percentage": multi_res["confidence_percentage"],
             "probabilities": multi_res["probabilities"],
             "is_positive": True,
-            "status_text": f"阳性 🎯 (类别: {multi_res['pred_class']})"
+            "status_text": f"Positive 🎯 (Category: {multi_res['pred_class']})"
         }
     else:
         models = get_ensemble_models(model_path=model_path)
@@ -474,12 +474,12 @@ def run_pipeline(
 
         model_inference_data = {
             "model_type": "binary",
-            "model_name": "二分类模型 (@finetune 5-Fold 集成)",
+            "model_name": "Binary Model (@finetune 5-Fold Ensemble)",
             "risk_probability": round(risk_probability, 4),
             "risk_percentage": f"{risk_probability * 100:.2f}%",
-            "risk_level": "High Risk (高风险阳性)" if is_positive else "Low Risk (低风险阴性)",
+            "risk_level": "High Risk" if is_positive else "Low Risk",
             "is_positive": is_positive,
-            "status_text": "阳性 🎯 (高风险)" if is_positive else "阴性 🛡️ (低风险)"
+            "status_text": "Positive 🎯 (High Risk)" if is_positive else "Negative 🛡️ (Low Risk)"
         }
 
     # 如果模型表征为阳性，进入 @entropy 信息熵检索
