@@ -1,23 +1,49 @@
-# 使用官方轻量 Python 3.11 镜像
 FROM python:3.13-slim-trixie
 
-# 从 official astral-sh/uv 镜像复制 uv 二进制工具
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+WORKDIR /srv/cannabinoids
 
-# 设置工作目录为 /app
-WORKDIR /app
+ARG APP_UID=1000
+ARG APP_GID=1000
 
-# 复制 app 目录所有文件到容器的 /app 目录
-COPY . /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HOME=/tmp \
+    MPLCONFIGDIR=/tmp/matplotlib \
+    MAX_DATA_LEN=100 \
+    PYTHONPATH=/srv/cannabinoids
 
-# 使用 uv 进行快速依赖安装 (CPU 版本 PyTorch 优化镜像体积)
-RUN uv pip install --system . --extra-index-url https://download.pytorch.org/whl/cpu
+COPY pyproject.toml ./
 
-# 暴露 FastAPI (8000) 和 Streamlit (8001) 端口
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends binutils; \
+    pip install -i https://pypi.tuna.tsinghua.edu.cn/simple --extra-index-url https://download.pytorch.org/whl/cpu --no-cache-dir .; \
+    rm -f pyproject.toml; \
+    find /usr/local/lib/python3.13/site-packages -type d \( -name "__pycache__" -o -name "tests" -o -name "test" \) -exec rm -rf {} + 2>/dev/null || true; \
+    find /usr/local/lib/python3.13/site-packages -name "*.py[co]" -delete 2>/dev/null || true; \
+    find /usr/local/lib/python3.13/site-packages -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true; \
+    find /usr/local/lib/python3.13/site-packages -name "*.a" -delete 2>/dev/null || true; \
+    groupadd --gid "${APP_GID}" appgroup; \
+    useradd --uid "${APP_UID}" --gid "${APP_GID}" --no-create-home --home-dir /tmp --shell /usr/sbin/nologin appuser; \
+    apt-get purge -y --auto-remove binutils; \
+    rm -rf /var/lib/apt/lists/* /var/cache/apt/* /tmp/* /root/.cache; \
+    pip cache purge 2>/dev/null || true
+
+
+# Minified image: copy only the core app/ and common/ folders, do not copy tests/
+COPY --chown=appuser:appgroup app/ ./app/
+COPY --chown=appuser:appgroup common/ ./common/
+
+# 预先创建 outputs 与 scratch 目录并赋予非 root 用户权限
+RUN mkdir -p outputs scratch && chown -R appuser:appgroup outputs scratch
+
+# 清除应用程序本身的字节码缓存
+RUN find ./app ./common -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
 EXPOSE 8000 8001
 
-# 设置 Python 模块路径
-ENV PYTHONPATH=/app
+USER appuser
 
-# 默认运行启动脚本以决定运行哪个服务
-CMD ["python", "start.py"]
+CMD ["python", "app/server.py"]

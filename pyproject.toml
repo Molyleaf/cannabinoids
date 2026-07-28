@@ -6,20 +6,28 @@ dependencies = [
     "torch",
     "numpy",
     "matplotlib",
-    "tqdm",
-    "ipykernel",
     "ms-entropy>=1.5.2",
     "safetensors",
-    "fastapi",
-    "uvicorn",
     "streamlit",
-    "python-multipart",
-    "httpx",
 ]
 
 [dependency-groups]
+deploy = [
+    "torch",
+    "numpy",
+    "matplotlib",
+    "ms-entropy>=1.5.2",
+    "safetensors",
+    "streamlit",
+]
 dev = [
     "cupy-cuda12x>=14.1.1",
+    "ipykernel",
+    "tqdm",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "httpx",
 ]
 
 [[tool.uv.index]]
@@ -29,4 +37,3 @@ explicit = true
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }
-
