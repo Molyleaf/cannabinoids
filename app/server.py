@@ -1,3 +1,19 @@
-# FastAPI server has been removed.
-# Streamlit is now used exclusively on port 8001.
-# Run `python app/start.py` to start the Streamlit application.
+# -*- coding: utf-8 -*-
+import sys
+import subprocess
+from pathlib import Path
+
+if __name__ == "__main__":
+    app_path = Path(__file__).resolve().parent / "streamlit" / "app.py"
+    cmd = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(app_path),
+        "--server.port=8001",
+        "--server.address=0.0.0.0",
+        "--server.baseUrlPath=cannabinoids"
+    ]
+    print(f"Starting Streamlit server on http://0.0.0.0:8001/cannabinoids (app: {app_path})...")
+    subprocess.run(cmd)

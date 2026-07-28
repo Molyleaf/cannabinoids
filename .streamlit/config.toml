@@ -1,1 +1,6 @@
 # Streamlit Default Configuration
+
+[server]
+port = 8001
+baseUrlPath = "cannabinoids"
+address = "0.0.0.0"
