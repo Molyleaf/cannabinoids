@@ -23,18 +23,20 @@ if str(project_root) not in sys.path:
 
 from app.pipeline import run_pipeline
 from app.privacy import record_sample_if_authorized, get_queue_stats
-from app.i18n import init_i18n
+from app.i18n import init_i18n, get_text as _
+
+# 1. 优先读取并确定 session_state 中的语言选择，初始化 i18n
+if "language" not in st.session_state:
+    st.session_state.language = "en_US"
+
+_ = init_i18n()
 
 st.set_page_config(
-    page_title="NPS Spectrum Platform",
+    page_title=_("NPS Spectrum Platform"),
     page_icon="🧪",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# 1. 优先读取并确定 session_state 中的语言选择
-if "language" not in st.session_state:
-    st.session_state.language = "en_US"
 
 st.sidebar.header("🌐 " + _("Language"))
 lang_options = {"English": "en_US", "简体中文": "zh_CN"}
@@ -51,9 +53,6 @@ selected_lang_code = lang_options[selected_lang_label]
 if st.session_state.language != selected_lang_code:
     st.session_state.language = selected_lang_code
     st.rerun()
-
-# 2. 在语言确定后绑定翻译函数 _
-_ = init_i18n()
 
 # 渲染顶部标题与流程说明
 st.title("🧪 " + _("NPS Spectrum Detection & Analysis Platform"))
