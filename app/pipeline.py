@@ -139,27 +139,44 @@ class MultiClassClassifier(nn.Module):
         return logits
 
 
-def get_multi_class_model(model_path: str = None):
-    """加载多分类模型 PyTorch 权重"""
+def get_multi_class_model(models_dir: str = None, model_path: str = None):
+    """从 app/models 目录加载多分类模型权重"""
     global _multi_class_model, _multi_class_names
 
     if _multi_class_model is not None and model_path is None:
         return _multi_class_model, _multi_class_names
 
     if model_path is None:
-        multi_dir = project_root / "multi_classifier"
-        candidates = sorted(list(multi_dir.glob("best_multi_class_model_*.pt")), key=lambda p: p.stat().st_mtime, reverse=True)
+        if models_dir is None:
+            models_dir = Path(__file__).resolve().parent / "models"
+        else:
+            models_dir = Path(models_dir)
+
+        patterns = [
+            "best_multi_class_model_*.pt",
+            "best_multi_class_model_*.safetensors",
+            "*multi_class*.pt",
+            "*multi_class*.safetensors",
+        ]
+        candidates = []
+        for pat in patterns:
+            matched = sorted(list(models_dir.glob(pat)), key=lambda p: p.stat().st_mtime, reverse=True)
+            if matched:
+                candidates = matched
+                break
+
         if not candidates:
-            candidates = sorted(list(multi_dir.glob("*.pt")), key=lambda p: p.stat().st_mtime, reverse=True)
-        if not candidates:
-            raise FileNotFoundError(f"在 {multi_dir} 下未找到多分类模型权重 .pt 文件")
+            raise FileNotFoundError(f"在目录 {models_dir} 下未找到多分类模型权重文件。")
         model_path = str(candidates[0])
 
     print(f"[Pipeline] 正在加载多分类模型权重: {model_path}")
-    checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
+    if model_path.endswith(".safetensors"):
+        checkpoint = load_file(model_path)
+    else:
+        checkpoint = torch.load(model_path, map_location="cpu", weights_only=False)
 
     class_names = _multi_class_names
-    if isinstance(checkpoint, dict) and 'config' in checkpoint and 'class_names' in checkpoint['config']:
+    if isinstance(checkpoint, dict) and 'config' in checkpoint and isinstance(checkpoint['config'], dict) and 'class_names' in checkpoint['config']:
         class_names = checkpoint['config']['class_names']
 
     num_classes = len(class_names)
@@ -425,7 +442,7 @@ def run_pipeline(
     """
     测样管线核心执行函数：
     1. 导入质谱 (MSP / MGF) 格式数据并清洗
-    2. 根据选择模型类型进行推理 (二分类 finetune 或 多分类 multi_classifier)
+    2. 根据选择模型类型进行推理 (二分类 finetune 或 多分类 Multi-class)
     3. 若模型判定为阳性 (Positive)，自动触发 @entropy 库相似度检索 (阈值 0.90)
     4. 相似度 > 0.90 时返回已知分子的 SMILES 结构式
     """
@@ -458,7 +475,7 @@ def run_pipeline(
         is_positive = True
         model_inference_data = {
             "model_type": "multi",
-            "model_name": "Multi-class Model (@multi_classifier)",
+            "model_name": "Multi-class Model",
             "pred_class": multi_res["pred_class"],
             "confidence": multi_res["confidence"],
             "confidence_percentage": multi_res["confidence_percentage"],
