@@ -4,31 +4,26 @@ import ms_entropy
 import numpy as np
 
 
-def parse_msp(msp_file, min_peaks=5):
+def parse_msp_text(text: str, min_peaks: int = 1) -> list:
     """
-    使用鲁棒状态机解析 MSP/MGF 质谱文件。
+    使用鲁棒状态机解析 MSP/MGF 质谱文本数据。
+    严格防范 Comments 或 Metadata 行泄漏至质谱峰矩阵中。
     返回包含 name, smiles, precursor_mz, peaks 的化合物列表。
     """
-    msp_path = Path(msp_file)
-    print(f"[DataProcessor] 正在解析 MSP 文件: {msp_path.name}...")
-    
-    with open(msp_path, 'r', encoding='utf-8', errors='ignore') as f:
-        lines = f.readlines()
-    
+    lines = text.splitlines()
     compounds = []
     current_comp = None
     in_peaks = False
-    
+
     for line in lines:
         stripped = line.strip()
         if not stripped:
             continue
-            
+
         lower = stripped.lower()
         if lower.startswith('name:'):
-            if current_comp is not None and 'peaks' in current_comp:
-                if len(current_comp['peaks']) >= min_peaks:
-                    compounds.append(current_comp)
+            if current_comp is not None and 'peaks' in current_comp and len(current_comp['peaks']) >= min_peaks:
+                compounds.append(current_comp)
             current_comp = {
                 'name': stripped.split(':', 1)[1].strip() if ':' in stripped else stripped,
                 'smiles': '',
@@ -44,9 +39,9 @@ def parse_msp(msp_file, min_peaks=5):
                     current_comp['precursor_mz'] = float(stripped.split(':', 1)[1].strip())
                 except ValueError:
                     pass
-            elif lower.startswith('num peaks:') or lower.startswith('num_peaks:'):
+            elif lower.startswith('num peaks:') or lower.startswith('num_peaks:') or lower.startswith('numpeaks:'):
                 in_peaks = True
-            else:
+            elif in_peaks or (stripped and (stripped[0].isdigit() or stripped[0] == '.')):
                 sub_items = stripped.split(';')
                 has_valid_peak = False
                 for sub in sub_items:
@@ -60,19 +55,43 @@ def parse_msp(msp_file, min_peaks=5):
                             intensity_str = parts[1].replace(';', '')
                             intensity = float(intensity_str)
                             if mz > 0 and intensity > 0:
-                                current_comp['peaks'].append((mz, intensity))
+                                current_comp['peaks'].append([mz, intensity])
                                 has_valid_peak = True
                         except (ValueError, TypeError):
                             pass
                 if has_valid_peak:
                     in_peaks = True
-    
-    if current_comp is not None and 'peaks' in current_comp:
-        if len(current_comp['peaks']) >= min_peaks:
-            compounds.append(current_comp)
-    
+
+    if current_comp is not None and 'peaks' in current_comp and len(current_comp['peaks']) >= min_peaks:
+        compounds.append(current_comp)
+
+    return compounds
+
+
+def parse_msp_bytes(file_bytes: bytes, min_peaks: int = 1) -> list:
+    """从二进制字节流解析 MSP/MGF 质谱数据。"""
+    try:
+        text = file_bytes.decode('utf-8', errors='ignore')
+    except Exception:
+        text = str(file_bytes)
+    return parse_msp_text(text, min_peaks=min_peaks)
+
+
+def parse_msp(msp_file, min_peaks: int = 5) -> list:
+    """
+    使用鲁棒状态机解析本地 MSP/MGF 质谱文件。
+    返回包含 name, smiles, precursor_mz, peaks 的化合物列表。
+    """
+    msp_path = Path(msp_file)
+    print(f"[DataProcessor] 正在解析 MSP 文件: {msp_path.name}...")
+
+    with open(msp_path, 'r', encoding='utf-8', errors='ignore') as f:
+        text = f.read()
+
+    compounds = parse_msp_text(text, min_peaks=min_peaks)
     print(f"[DataProcessor] 成功解析出 {len(compounds)} 个化合物谱图")
     return compounds
+
 
 
 def clean_spectrum(peaks):

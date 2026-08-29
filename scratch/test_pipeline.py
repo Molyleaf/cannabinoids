@@ -14,10 +14,17 @@ if pos_msp_path.exists():
     with open(pos_msp_path, "rb") as f:
         file_bytes = f.read()
 
-    print("Testing pipeline on positive.msp spectrum (expecting high similarity match > 0.90)...")
-    res_pos = run_pipeline(file_bytes, "positive_sample.msp", model_type="multi", min_similarity=0.90)
-    print("Multi Class Pred:", res_pos["model_inference"]["pred_class"])
-    print("Entropy Match (>0.90):", res_pos["entropy_match"]["is_matched"], "Score:", res_pos["entropy_match"]["similarity_score"])
+    print("Testing pipeline on positive.msp spectrum with multi-class model (default min_similarity=0.80)...")
+    res_pos = run_pipeline(file_bytes, "positive_sample.msp", model_type="multi", min_similarity=0.80)
+    print("Multi Class Pred Class (pure English):", res_pos["model_inference"]["pred_class"])
+    print("Entropy Match (>0.80):", res_pos["entropy_match"]["is_matched"], "Score:", res_pos["entropy_match"]["similarity_score"])
     print("Returned SMILES:", res_pos["entropy_match"]["matched_smiles"])
     print("Matched Compound Name:", res_pos["entropy_match"]["matched_name"])
+    print("Probabilities keys (pure English):", list(res_pos["model_inference"]["probabilities"].keys()))
+
+    print("\nTesting pipeline on positive.msp with binary model...")
+    res_bin = run_pipeline(file_bytes, "positive_sample.msp", model_type="binary", min_similarity=0.80)
+    print("Binary Model Name:", res_bin["model_inference"]["model_name"])
+    print("Binary Risk Probability:", res_bin["model_inference"]["risk_probability"])
+    print("Binary Status Text:", res_bin["model_inference"]["status_text"])
 
