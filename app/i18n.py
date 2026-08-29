@@ -1,25 +1,22 @@
-import gettext
-import os
-import struct
-from pathlib import Path
+# -*- coding: utf-8 -*-
+from typing import Optional
 import streamlit as st
 
-LOCALES_DIR = Path(__file__).resolve().parent / "locales"
-
-# 以英文为默认源码语言，定义 英文 -> 中文 映射表
+# English is the default source language; define English -> Chinese mapping dictionary
 ZH_CN_TRANSLATIONS = {
-    "": "Project-Id-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\n",
-    "NPS Spectrum Detection & Analysis Platform": "新精神活性物质质谱检测与分析平台",
-    "NPS Spectrum Platform": "NPS 质谱检测平台",
+    "NPS Spectral Intelligence Platform": "新精神活性物质质谱智能分析平台",
+    "NPS Spectrum Platform": "NPS 质谱智能平台",
     "Upload mass spectrum files to quickly perform model inference and known structure retrieval.": "上传质谱文件，快速完成模型推断与已知分子结构检索。",
     "Analysis Workflow Instructions": "分析流程说明",
-    "1. Upload File: Supports .msp and .mgf formats.": "1. 上传文件：支持 .msp 和 .mgf 格式。",
-    "2. Select Model: Binary Model (Risk Evaluation) or Multi-class Model (Structure Classification).": "2. 选择模型：提供二分类模型 (风险评估) 和多分类模型 (结构分类)。",
-    "3. View Results: Automatic positive/negative inference; returns SMILES for similarity > 0.90.": "3. 查看结果：模型自动推断阳性/阴性，并在高相似度 (>0.90) 时返回已知分子的 SMILES 结构式。",
+    "1. Select Model: binary model (SC versus NSC) or multi-class model (nine NPS categories).": "1. 选择模型：二分类模型 (合成大麻素 SC 与非合成大麻素 NSC) 或多分类模型 (九大类 NPS)。",
+    "2. Sign the data sharing consent: consent to share spectrum data or not.": "2. 签署数据共享知情同意：同意共享谱图数据或选择仅本地分析。",
+    "3. Upload File: Supports .msp and .mgf formats.": "3. 上传文件：支持 .msp 和 .mgf 格式。",
     "Analysis Settings": "检测配置",
     "Language": "语言选择",
     "Language Selector": "选择语言",
     "Select Model": "选择分析模型",
+    "Binary Model (SC versus NSC)": "二分类模型 (SC vs NSC)",
+    "Multi-class Model (nine NPS categories)": "多分类模型 (九大类 NPS)",
     "Binary Model (Risk Evaluation)": "二分类模型 (风险评估)",
     "Multi-class Model (Structure Classification)": "多分类模型 (结构分类)",
     "Library Match Threshold (Similarity)": "已知库匹配阈值 (相似度)",
@@ -47,6 +44,7 @@ ZH_CN_TRANSLATIONS = {
     "Negative (Negative)": "阴性 (Negative)",
     "Matched SMILES": "已匹配 SMILES",
     "Below Threshold": "低于阈值",
+    "Below 0.80 Threshold": "低于 0.80 阈值",
     "Below 0.90 Threshold": "低于 0.90 阈值",
     "Not Triggered": "未触发",
     "Negative Sample (Skipped)": "阴性样本免检索",
@@ -88,6 +86,8 @@ ZH_CN_TRANSLATIONS = {
     "results archived for model performance improvement.": "结果已归档用于模型性能改进。",
     "Positive 🎯 (High Risk)": "阳性 🎯 (高风险)",
     "Negative 🛡️ (Low Risk)": "阴性 🛡️ (低风险)",
+    "Positive (High Risk)": "阳性 🎯 (高风险)",
+    "Negative (Low Risk)": "阴性 🛡️ (低风险)",
     "Positive 🎯": "阳性 🎯",
     "Category": "类别",
     "High Risk": "高风险阳性",
@@ -114,93 +114,79 @@ ZH_CN_TRANSLATIONS = {
     "Not Provided": "未提供",
     "Model Prediction Probability ($P$)": "模型预测概率 ($P$)",
     "Uncertainty Interval (Pending Manual Review)": "不确定区间 (待人工复核)",
+    "Pending Manual Review": "待人工复核",
     "High Confidence Interval": "高置信度区间",
     "Intensity": "响应强度",
     "Error during analysis:": "分析过程发生错误：",
-    "芬太尼": "芬太尼类",
-    "卡西酮": "卡西酮类",
-    "大麻素": "合成大麻素类",
+    "Fentanyls": "芬太尼类",
+    "Cathinones": "卡西酮类",
+    "Synthetic Cathinones": "合成卡西酮类",
+    "Synthetic Cannabinoids": "合成大麻素类",
+    "Cannabinoids": "合成大麻素类",
     "Arylcyclohexylamines": "芳基环己胺类",
     "Benzodiazepines": "苯二氮䓬类",
     "Nitazenes": "硝嗪类",
     "Opiates": "阿片类",
     "Phenethylamines": "苯乙胺类",
-    "Tryptamines": "色胺类"
+    "Tryptamines": "色胺类",
 }
 
-
-def create_mo_file(mo_path: Path, translations: dict):
-    """使用纯 Python 构建符合 GNU gettext 标准二进制规范的 .mo 文件"""
-    keys = sorted(list(translations.keys()))
-    N = len(keys)
-
-    orig_table = []
-    trans_table = []
-    orig_bytes = b""
-    trans_bytes = b""
-
-    for k in keys:
-        k_b = k.encode('utf-8')
-        v_b = translations[k].encode('utf-8')
-
-        orig_table.append((len(k_b), len(orig_bytes)))
-        orig_bytes += k_b + b"\x00"
-
-        trans_table.append((len(v_b), len(trans_bytes)))
-        trans_bytes += v_b + b"\x00"
-
-    header_size = 28
-    orig_table_size = N * 8
-    trans_table_size = N * 8
-    start_strings = header_size + orig_table_size + trans_table_size
-
-    table_orig_bytes = b""
-    for length, rel_off in orig_table:
-        table_orig_bytes += struct.pack("<II", length, start_strings + rel_off)
-
-    table_trans_bytes = b""
-    start_trans_strings = start_strings + len(orig_bytes)
-    for length, rel_off in trans_table:
-        table_trans_bytes += struct.pack("<II", length, start_trans_strings + rel_off)
-
-    header = struct.pack("<IIIIIII", 0x950412de, 0, N, 28, 28 + orig_table_size, 0, 0)
-    mo_data = header + table_orig_bytes + table_trans_bytes + orig_bytes + trans_bytes
-
-    mo_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(mo_path, "wb") as f:
-        f.write(mo_data)
+_default_language = "en_US"
 
 
-def build_all_locales():
-    """编译 zh_CN 的 .mo 翻译包"""
-    zh_mo = LOCALES_DIR / "zh_CN" / "LC_MESSAGES" / "messages.mo"
-    create_mo_file(zh_mo, ZH_CN_TRANSLATIONS)
+def _has_active_streamlit_session() -> bool:
+    """Safely check if running within an active Streamlit execution runtime."""
+    try:
+        return hasattr(st, "runtime") and hasattr(st.runtime, "exists") and st.runtime.exists()
+    except Exception:
+        return False
+
+
+def set_language(lang: str) -> None:
+    """Set the active language."""
+    global _default_language
+    _default_language = lang
+    if _has_active_streamlit_session():
+        try:
+            st.session_state.language = lang
+        except Exception:
+            pass
+
+
+def get_current_language() -> str:
+    """Get the active language from session_state if available, else default fallback."""
+    if _has_active_streamlit_session():
+        try:
+            if "language" in st.session_state:
+                return st.session_state.language
+        except Exception:
+            pass
+    return _default_language
 
 
 def init_i18n():
     """
-    初始化 i18n 模块并与 st.session_state 协同管理语言切换 (源码默认语言：en_US 英语)
+    Initialize i18n module and synchronize with st.session_state.
+    Default language: en_US.
     """
-    build_all_locales()
-
-    if "language" not in st.session_state:
-        st.session_state.language = "en_US"
-
-    if hasattr(gettext, "_translations"):
-        gettext._translations.clear()
-
-    # 导出可直接调用的 get_text 函数
-    st.session_state._ = get_text
+    if _has_active_streamlit_session():
+        try:
+            if "language" not in st.session_state:
+                st.session_state.language = "en_US"
+            st.session_state._ = get_text
+        except Exception:
+            pass
     return get_text
 
 
-def get_text(message: str) -> str:
+def get_text(message: str, lang: Optional[str] = None) -> str:
     """
-    根据 st.session_state.language 优先检索字典映射：
-    - en_US: 直接返回英文原文 message
-    - zh_CN: 返回 ZH_CN_TRANSLATIONS 中对应的中文翻译
+    Retrieve translated text according to active language:
+    - en_US: returns the original English text
+    - zh_CN: returns the Chinese translation from ZH_CN_TRANSLATIONS
     """
-    lang = st.session_state.get("language", "en_US")
+    if lang is None:
+        lang = get_current_language()
     if lang == "zh_CN":
         return ZH_CN_TRANSLATIONS.get(message, message)
     return message

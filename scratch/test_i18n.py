@@ -1,26 +1,46 @@
 import sys
+import io
 from pathlib import Path
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root))
 
-import streamlit as st
-from app.i18n import init_i18n
-
-st.session_state.language = "en_US"
-_ = init_i18n()
+from app.i18n import get_text, set_language
 
 test_strings = [
-    "感谢您支持模型优化！",
-    "信息提交成功！",
-    "关于数据共享与致谢",
-    "数据共享将直接帮助提升模型的检测准确率：",
-    "模型更新通知：模型发布新版本时，您将优先收到通知邮件，了解改进详情。",
-    "贡献致谢：在模型升级公告中，系统将以您提供的称呼表达致谢。",
+    "NPS Spectral Intelligence Platform",
+    "Analysis Workflow Instructions",
+    "1. Select Model: binary model (SC versus NSC) or multi-class model (nine NPS categories).",
+    "2. Sign the data sharing consent: consent to share spectrum data or not.",
+    "3. Upload File: Supports .msp and .mgf formats.",
+    "Binary Model (SC versus NSC)",
+    "Multi-class Model (nine NPS categories)",
+    "Library Match Threshold (Similarity)",
+    "Below 0.80 Threshold",
+    "Fentanyls",
+    "Cathinones",
+    "Synthetic Cannabinoids",
+    "Arylcyclohexylamines",
+    "Benzodiazepines",
+    "Nitazenes",
+    "Opiates",
+    "Phenethylamines",
+    "Tryptamines",
+    "Positive (High Risk)",
+    "Negative (Low Risk)",
+    "Pending Manual Review",
 ]
 
+print("=== Testing en_US (English default) ===")
+set_language("en_US")
 for s in test_strings:
-    translated = _(s)
-    print(f"Original: '{s}'")
-    print(f"Result:   '{translated}'")
-    print("-" * 50)
+    print(f"EN: '{s}' -> '{get_text(s)}'")
+
+print("\n=== Testing zh_CN (Chinese translation) ===")
+set_language("zh_CN")
+for s in test_strings:
+    print(f"ZH: '{s}' -> '{get_text(s)}'")
+
+
