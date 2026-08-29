@@ -66,3 +66,8 @@ simclr_finetune/scratch/
 simclr_finetune/results_*
 embedding_pretrain/results_*
 results_*
+
+# Dynamic runtime data queue
+app/data_queue/*.json
+app/data_queue/*.jsonl
+!app/data_queue/.gitkeep
