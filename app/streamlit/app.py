@@ -62,9 +62,9 @@ render_hero_section(
     title=_("NPS Spectral Intelligence Platform"),
     subtitle=_("Upload mass spectrum files to quickly perform model inference and known structure retrieval."),
     steps=[
-        _("1. Select Model: binary model (SC versus NSC) or multi-class model (nine NPS categories)."),
+        _("1. Select model: binary model (SC versus NSC) or multi-class model (nine NPS categories)."),
         _("2. Sign the data sharing consent: consent to share spectrum data or not."),
-        _("3. Upload File: Supports .msp and .mgf formats.")
+        _("3. Upload file: Supports .msp and .mgf formats.")
     ]
 )
 
@@ -121,7 +121,7 @@ else:
 with st.sidebar.expander("ℹ️ " + _("About Data Sharing & Acknowledgments")):
     st.markdown(_("Data sharing directly helps improve model detection accuracy:"))
     st.markdown("- " + _("Model Update Notifications: Priority email notifications with update details when a new version is released."))
-    st.markdown("- " + _("Contributor Acknowledgments: System acknowledgments in model update notes will address you as provided."))
+    st.markdown("- " + _("Uncertainty Sample Feedback: Expert-reviewed results will be returned via email for samples falling within this zone."))
 
 # ==================== Main Page Analysis ====================
 uploaded_file = st.file_uploader(
