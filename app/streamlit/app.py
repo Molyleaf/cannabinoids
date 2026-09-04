@@ -142,6 +142,7 @@ if uploaded_file is not None:
                 min_similarity=min_similarity
             )
 
+            is_ood = result.get("is_ood", False)
             model_inf = result["model_inference"]
             entropy_match = result["entropy_match"]
             pred_prob = model_inf["risk_probability"] if model_type_key == "binary" else model_inf["confidence"]
@@ -155,7 +156,8 @@ if uploaded_file is not None:
                 predicted_result=model_inf["status_text"],
                 user_consent=user_consent,
                 user_name=user_name,
-                user_email=user_email
+                user_email=user_email,
+                skip_uncertainty=is_ood
             )
 
             st.success("🎉 " + _("Analysis complete!"))
@@ -163,6 +165,8 @@ if uploaded_file is not None:
             # Privacy & sample review notification
             if not privacy_res["authorized"]:
                 st.info("🔒 **" + _("Privacy Mode Active") + "**: " + _("Only current detection results are displayed; no data is retained in the system."))
+            elif is_ood:
+                st.success("✅ **" + _("Detection Complete") + "**: " + _("Sample categorized as out-of-distribution (OOD)."))
             elif privacy_res["is_uncertain"]:
                 st.warning("⚠️ **" + _("Boundary Sample Review Notice") + f"**: {_('Predicted probability is')} **{pred_prob:.2f}**, {_('falling in model uncertainty interval [0.3, 0.7]. Saved to pending review queue for expert review.')}")
             else:
@@ -180,14 +184,22 @@ if uploaded_file is not None:
                 st.metric(_("Cleaned Peak Count"), result["num_cleaned_peaks"])
 
             with col3:
-                status_disp = _(model_inf["status_text"]) if model_type_key == "binary" else f"{_('Positive 🎯')} ({_('Category')}: {_(model_inf['pred_class'])})"
-                if result["is_positive"]:
-                    st.metric(_("Model Determination"), status_disp, delta=_("Positive"), delta_color="inverse")
+                if is_ood:
+                    st.metric(_("Model Determination"), "OOD", delta=_("OOD"), delta_color="off")
+                elif model_type_key == "binary":
+                    status_disp = _(model_inf["status_text"])
+                    if result["is_positive"]:
+                        st.metric(_("Model Determination"), status_disp, delta=_("Positive"), delta_color="inverse")
+                    else:
+                        st.metric(_("Model Determination"), status_disp, delta=_("Negative"), delta_color="normal")
                 else:
-                    st.metric(_("Model Determination"), status_disp, delta=_("Negative"), delta_color="normal")
+                    status_disp = f"{_('Positive 🎯')} ({_('Category')}: {_(model_inf['pred_class'])})"
+                    st.metric(_("Model Determination"), status_disp, delta=_("Positive"), delta_color="inverse")
 
             with col4:
-                if entropy_match["is_matched"]:
+                if is_ood:
+                    st.metric(_("Known Molecule Similarity"), "-", delta=None)
+                elif entropy_match["is_matched"]:
                     st.metric(_("Known Molecule Similarity"), f"{entropy_match['similarity_score']:.4f}", delta=_("Matched SMILES"), delta_color="normal")
                 elif entropy_match["is_triggered"]:
                     st.metric(_("Known Molecule Similarity"), f"{entropy_match['similarity_score']:.4f}", delta=f"{_('Below Threshold')} ({min_similarity:.2f})", delta_color="off")
@@ -213,12 +225,18 @@ if uploaded_file is not None:
                     st.write(f"- **{_('Determination Result')}**: **{_(model_inf['risk_level'])}**")
                 else:
                     st.write(f"- **{_('Evaluated Model')}**: {_(model_inf['model_name'])}")
-                    st.write(f"- **{_('Predicted Category')}**: **{_(model_inf['pred_class'])}**")
-                    st.write(f"- **{_('Category Confidence')}**: `{model_inf['confidence']}` ({model_inf['confidence_percentage']})")
+                    if is_ood:
+                        st.write(f"- **{_('Predicted Category')}**: **OOD**")
+                        st.write(f"- **{_('Category Confidence')}**: -")
+                    else:
+                        st.write(f"- **{_('Predicted Category')}**: **{_(model_inf['pred_class'])}**")
+                        st.write(f"- **{_('Category Confidence')}**: `{model_inf['confidence']}` ({model_inf['confidence_percentage']})")
 
                 st.markdown("---")
                 st.subheader(_("2. Known Library Match Result"))
-                if not entropy_match["is_triggered"]:
+                if is_ood:
+                    st.write("-")
+                elif not entropy_match["is_triggered"]:
                     st.info(_("Current sample evaluated as negative by model, library search not triggered."))
                 else:
                     st.write(f"- **{_('Highest Similarity Score')}**: `{entropy_match['similarity_score']:.4f}`")
@@ -255,7 +273,9 @@ if uploaded_file is not None:
 
             with tab3:
                 st.subheader(_("Prediction Probabilities"))
-                if model_type_key == "multi":
+                if is_ood:
+                    st.write("-")
+                elif model_type_key == "multi":
                     probs_dict = model_inf["probabilities"]
                     classes = list(probs_dict.keys())
                     probs_vals = [probs_dict[c] * 100 for c in classes]
@@ -283,9 +303,14 @@ if uploaded_file is not None:
                 if user_consent:
                     st.write(f"- **{_('Contributor Signature')}**: `{user_name if user_name else _('Anonymous Contributor')}`")
                     st.write(f"- **{_('Notification Email')}**: `{user_email if user_email else _('Not Provided')}`")
-                st.write(f"- **{_('Model Prediction Probability ($P$)')}**: `{pred_prob:.4f}`")
-                st.write(f"- **{_('Uncertainty Interval')}**: `[0.3, 0.7]`")
-                st.write(f"- **{_('Sample Classification')}**: `{_('Uncertainty Interval (Pending Manual Review)') if privacy_res['is_uncertain'] else _('High Confidence Interval')}`")
+                if is_ood:
+                    st.write(f"- **{_('Model Prediction Probability ($P$)')}**: -")
+                    st.write(f"- **{_('Uncertainty Interval')}**: -")
+                    st.write(f"- **{_('Sample Classification')}**: -")
+                else:
+                    st.write(f"- **{_('Model Prediction Probability ($P$)')}**: `{pred_prob:.4f}`")
+                    st.write(f"- **{_('Uncertainty Interval')}**: `[0.3, 0.7]`")
+                    st.write(f"- **{_('Sample Classification')}**: `{_('Uncertainty Interval (Pending Manual Review)') if privacy_res['is_uncertain'] else _('High Confidence Interval')}`")
 
                 stats = get_queue_stats()
                 col_s1, col_s2 = st.columns(2)

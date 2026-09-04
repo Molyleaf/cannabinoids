@@ -77,11 +77,12 @@ def record_sample_if_authorized(
     predicted_result: str,
     user_consent: bool,
     user_name: str = "",
-    user_email: str = ""
+    user_email: str = "",
+    skip_uncertainty: bool = False
 ) -> Dict[str, Any]:
     """
     Phase 1: Informed consent & privacy check. If not authorized, do not persist or upload data.
-    Phase 2: If authorized, check if prediction probability falls into the [0.3, 0.7] uncertainty interval.
+    Phase 2: If authorized and not skip_uncertainty, check if prediction probability falls into the [0.3, 0.7] uncertainty interval.
     If so, save to local review queue and trigger human review flag.
     """
     if not user_consent:
@@ -105,28 +106,33 @@ def record_sample_if_authorized(
     _append_jsonl_record(CONTRIBUTIONS_FILE, contribution_record)
 
     # Phase 2: Uncertainty interval judgment [0.3, 0.7]
-    is_uncertain = 0.3 <= probability <= 0.7
-    review_flag = False
-
-    if is_uncertain:
-        review_flag = True
-        queue_item = {
-            "id": f"UNC_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}",
-            "timestamp": datetime.now().isoformat(),
-            "file_name": file_name,
-            "model_type": model_type,
-            "probability": round(probability, 4),
-            "predicted_result": predicted_result,
-            "user_name": user_name.strip() if user_name else "Anonymous Contributor",
-            "user_email": user_email.strip() if user_email else "",
-            "status": "Pending Manual Review",
-            "peaks_count": len(peaks),
-            "peaks": peaks
-        }
-        _append_jsonl_record(UNCERTAIN_QUEUE_FILE, queue_item)
-        status_msg = "Authorized: Sample probability falls in uncertainty interval [0.3, 0.7]. Saved to pending review queue."
+    if skip_uncertainty:
+        is_uncertain = False
+        review_flag = False
+        status_msg = "Authorized: Results archived for model improvement (uncertainty evaluation skipped)."
     else:
-        status_msg = "Authorized: Sample confidence is high. Results archived for model improvement."
+        is_uncertain = 0.3 <= probability <= 0.7
+        review_flag = False
+
+        if is_uncertain:
+            review_flag = True
+            queue_item = {
+                "id": f"UNC_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}",
+                "timestamp": datetime.now().isoformat(),
+                "file_name": file_name,
+                "model_type": model_type,
+                "probability": round(probability, 4),
+                "predicted_result": predicted_result,
+                "user_name": user_name.strip() if user_name else "Anonymous Contributor",
+                "user_email": user_email.strip() if user_email else "",
+                "status": "Pending Manual Review",
+                "peaks_count": len(peaks),
+                "peaks": peaks
+            }
+            _append_jsonl_record(UNCERTAIN_QUEUE_FILE, queue_item)
+            status_msg = "Authorized: Sample probability falls in uncertainty interval [0.3, 0.7]. Saved to pending review queue."
+        else:
+            status_msg = "Authorized: Sample confidence is high. Results archived for model improvement."
 
     return {
         "authorized": True,

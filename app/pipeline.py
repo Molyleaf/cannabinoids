@@ -66,22 +66,42 @@ def run_pipeline(
     vec_norm = preprocess_spectra(vec)
 
     is_positive = False
+    is_ood = False
     model_inference_data: Dict[str, Any] = {}
 
     if model_type == "multi":
         multi_res = predict_multi_class(vec_norm, model_path=model_path)
-        is_positive = True
-        model_inference_data = {
-            "model_type": "multi",
-            "model_name": "Multi-class Model (nine NPS categories)",
-            "pred_class": multi_res["pred_class"],
-            "confidence": multi_res["confidence"],
-            "confidence_percentage": multi_res["confidence_percentage"],
-            "probabilities": multi_res["probabilities"],
-            "is_positive": True,
-            "status_text": f"Positive (Category: {multi_res['pred_class']})"
-        }
+        possibility = float(multi_res["confidence"])
+        if possibility < 0.98:
+            is_ood = True
+            is_positive = False
+            model_inference_data = {
+                "model_type": "multi",
+                "model_name": "Multi-class Model (nine NPS categories)",
+                "pred_class": "OOD",
+                "confidence": possibility,
+                "confidence_percentage": multi_res["confidence_percentage"],
+                "probabilities": multi_res["probabilities"],
+                "is_positive": False,
+                "is_ood": True,
+                "status_text": "OOD"
+            }
+        else:
+            is_ood = False
+            is_positive = True
+            model_inference_data = {
+                "model_type": "multi",
+                "model_name": "Multi-class Model (nine NPS categories)",
+                "pred_class": multi_res["pred_class"],
+                "confidence": possibility,
+                "confidence_percentage": multi_res["confidence_percentage"],
+                "probabilities": multi_res["probabilities"],
+                "is_positive": True,
+                "is_ood": False,
+                "status_text": f"Positive (Category: {multi_res['pred_class']})"
+            }
     else:
+        is_ood = False
         models = get_ensemble_models(model_path=model_path)
         probs = predict_risk_ensemble(vec_norm, models)
         risk_probability = float(probs[0])
@@ -94,22 +114,28 @@ def run_pipeline(
             "risk_percentage": f"{risk_probability * 100:.2f}%",
             "risk_level": "High Risk" if is_positive else "Low Risk",
             "is_positive": is_positive,
+            "is_ood": False,
             "status_text": "Positive (High Risk)" if is_positive else "Negative (Low Risk)"
         }
 
-    # If evaluated as positive, trigger entropy search
+    # If evaluated as positive and not OOD, trigger entropy search
     entropy_match_result = {
-        "is_triggered": is_positive,
+        "is_triggered": is_positive and not is_ood,
         "is_matched": False,
+        "is_ood": is_ood,
         "similarity_score": 0.0,
         "matched_smiles": "",
         "raw_matched_smiles": "",
         "matched_name": "",
         "min_similarity_threshold": min_similarity,
-        "message": "Negative sample, library search not triggered." if not is_positive else ""
+        "message": (
+            "OOD sample, library search not triggered."
+            if is_ood
+            else ("Negative sample, library search not triggered." if not is_positive else "")
+        )
     }
 
-    if is_positive:
+    if is_positive and not is_ood:
         search_res = search_entropy_detail(
             query_dict,
             min_similarity=min_similarity
@@ -134,6 +160,7 @@ def run_pipeline(
         "precursor_mz": precursor_mz,
         "model_type_selected": model_type,
         "is_positive": is_positive,
+        "is_ood": is_ood,
         "model_inference": model_inference_data,
         "entropy_match": entropy_match_result,
         "peaks": cleaned_peaks_arr.tolist()
