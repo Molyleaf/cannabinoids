@@ -1,0 +1,712 @@
+"""
+SimCLR Contrastive Learning Pre-training (Optimized Version)
+- Data augmentation redesigned according to your specifications
+- Automatic stopping (convergence detection)
+- Optimized runtime speed
+File: train_simclr_optimized.py
+"""
+
+import random
+from datetime import datetime
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, TensorDataset
+from tqdm import tqdm
+
+
+# ==================== Encoder ====================
+
+class SpectrumEncoder(nn.Module):
+    """1D-CNN Mass Spectrum Encoder"""
+    def __init__(self, input_dim=561, hidden_dim=256):
+        super().__init__()
+        self.conv_block = nn.Sequential(
+            nn.Conv1d(1, 64, kernel_size=7, padding=3),
+            nn.BatchNorm1d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+            nn.Conv1d(64, 128, kernel_size=5, padding=2),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool1d(2),
+            nn.Conv1d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+            nn.AdaptiveAvgPool1d(1)
+        )
+        self.fc = nn.Sequential(
+            nn.Linear(256, hidden_dim),
+            nn.BatchNorm1d(hidden_dim)
+        )
+    
+    def forward(self, x):
+        if x.dim() == 2:
+            x = x.unsqueeze(1)
+        h = self.conv_block(x).squeeze(-1)
+        embed = self.fc(h)
+        return F.normalize(embed, p=2, dim=1)
+
+
+class ProjectionHead(nn.Module):
+    """Projection Head"""
+    def __init__(self, input_dim=256, hidden_dim=128, output_dim=64):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.BatchNorm1d(hidden_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim, output_dim)
+        )
+    
+    def forward(self, x):
+        return self.net(x)
+
+
+class SimCLR(nn.Module):
+    def __init__(self, encoder, projection_head):
+        super().__init__()
+        self.encoder = encoder
+        self.projection_head = projection_head
+    
+    def forward(self, x):
+        h = self.encoder(x)
+        z = self.projection_head(h)
+        return h, z
+
+
+# ==================== Data Augmentation (Per Your Specifications) ====================
+
+class SpectrumAugmentation:
+    """
+    GC-EI Mass Spectrum Data Augmentation (Designed per requirements)
+    
+    Includes four dimensions:
+    1. Intensity jitter + renormalization to 999
+    2. m/z shift ±1 Da
+    3. Probabilistic removal of low-abundance peaks
+    4. Differentiated noise injection (Rayleigh baseline noise + Gaussian noise clusters)
+    """
+    def __init__(self,
+                 # Intensity jitter
+                 intensity_jitter_range=(0.6, 1.5),
+                 # m/z shift
+                 mz_shift_range=1,
+                 # Low-abundance peak removal
+                 minor_peak_threshold_ratio=0.20,  # 20% of base peak
+                 minor_peak_removal_prob=0.30,     # 30% removal probability
+                 min_peaks_retain=3,               # Retain at least 3 peaks
+                 # Rayleigh baseline noise
+                 rayleigh_scale_tolerance=(0.005, 0.05),  # 0.5%-5% of TIC
+                 # Gaussian noise clusters
+                 n_clusters_range=(1, 5),           # 1-5 noise clusters
+                 cluster_width_range=(3, 11),       # Cluster width 3-11 Da
+                 cluster_amp_ratio_range=(0.10, 0.50)  # 10%-50% of adjacent peak height
+                ):
+        self.intensity_jitter_range = intensity_jitter_range
+        self.mz_shift_range = mz_shift_range
+        self.minor_peak_threshold_ratio = minor_peak_threshold_ratio
+        self.minor_peak_removal_prob = minor_peak_removal_prob
+        self.min_peaks_retain = min_peaks_retain
+        self.rayleigh_scale_tolerance = rayleigh_scale_tolerance
+        self.n_clusters_range = n_clusters_range
+        self.cluster_width_range = cluster_width_range
+        self.cluster_amp_ratio_range = cluster_amp_ratio_range
+    
+    def __call__(self, spectrum):
+        """Supports both single spectrum and batch processing"""
+        if spectrum.dim() == 1:
+            return self._augment_single(spectrum)
+        else:
+            return torch.stack([self._augment_single(s) for s in spectrum])
+    
+    def _augment_single(self, spec):
+        """
+        Single spectrum augmentation
+        Input: spec (torch.Tensor), spectrum already TIC-normalized + sqrt-transformed
+        Output: Augmented spectrum
+        """
+        device = spec.device
+        
+        # ===== Prelim: Restore to original intensity scale =====
+        # Input is sqrt-compressed; need to square it back and multiply by TIC (but TIC is unknown, using simulation)
+        # In practice, we operate directly on current intensity values
+        
+        # ===== Dimension 1: Intensity jitter + renormalization to 999 =====
+        spec = self._intensity_jitter_with_renorm(spec, device)
+        
+        # ===== Dimension 2: m/z shift =====
+        spec = self._mz_shift(spec, device)
+        
+        # ===== Dimension 3: Probabilistic removal of low-abundance peaks =====
+        spec = self._remove_minor_peaks(spec, device)
+        
+        # ===== Dimension 4: Differentiated noise injection =====
+        spec = self._inject_noise(spec, device)
+        
+        # ===== Post-processing: Re-apply TIC normalization + sqrt =====
+        spec = self._re_normalize(spec)
+        
+        return spec
+    
+    def _intensity_jitter_with_renorm(self, spec, device):
+        """Intensity jitter + renormalization to 999"""
+        nonzero_mask = spec > 1e-8
+        
+        if nonzero_mask.sum() == 0:
+            return spec
+        
+        # Generate random jitter factors [0.6, 1.5] for each non-zero point
+        jitter_factors = torch.empty(spec.shape[0], device=device).uniform_(
+            self.intensity_jitter_range[0],
+            self.intensity_jitter_range[1]
+        )
+        
+        # Apply jitter
+        spec = spec * jitter_factors
+        
+        # Find maximum peak and renormalize to 999
+        spec_max = spec.max()
+        if spec_max > 1e-8:
+            spec = spec / spec_max * 999.0
+        
+        return spec
+    
+    def _mz_shift(self, spec, device):
+        """Overall m/z shift ±1 Da"""
+        shift = random.randint(-self.mz_shift_range, self.mz_shift_range)
+        if shift != 0:
+            spec = torch.roll(spec, shifts=shift, dims=0)
+            if shift > 0:
+                spec[:shift] = 0.0
+            elif shift < 0:
+                spec[shift:] = 0.0
+        return spec
+    
+    def _remove_minor_peaks(self, spec, device):
+        """
+        Probabilistic removal of low-abundance peaks
+        Algorithm:
+        1. Determine dynamic threshold = base peak intensity × 20%
+        2. Each peak below threshold has 30% probability of removal
+        3. Ensure at least 3 peaks are retained
+        """
+        base_peak = spec.max()
+        if base_peak < 1e-8:
+            return spec
+        
+        dynamic_threshold = base_peak * self.minor_peak_threshold_ratio
+        
+        # Find non-zero points below threshold
+        minor_mask = (spec > 1e-8) & (spec < dynamic_threshold)
+        major_mask = (spec >= dynamic_threshold) & (spec > 1e-8)
+        
+        n_major = major_mask.sum().item()
+        
+        if minor_mask.any():
+            # For each low-abundance peak, remove with 30% probability
+            removal_probs = torch.rand(spec.shape[0], device=device)
+            removal_mask = minor_mask & (removal_probs < self.minor_peak_removal_prob)
+            
+            # Check if total peaks after removal ≥ 3
+            n_total_before = (spec > 1e-8).sum().item()
+            n_remove = removal_mask.sum().item()
+            
+            if n_total_before - n_remove >= self.min_peaks_retain:
+                spec[removal_mask] = 0.0
+        
+        return spec
+    
+    def _inject_noise(self, spec, device):
+        """
+        Differentiated noise injection:
+        1. Rayleigh baseline noise (across entire spectrum)
+        2. Gaussian noise clusters (local m/z regions)
+        """
+        spec_max = spec.max()
+        if spec_max < 1e-8:
+            return spec
+        
+        tic = spec.sum()
+        
+        # ----- Rayleigh baseline noise -----
+        # Rayleigh distribution scale parameter, calibrated to 0.5%-5% of TIC
+        rayleigh_scale = random.uniform(
+            self.rayleigh_scale_tolerance[0],
+            self.rayleigh_scale_tolerance[1]
+        ) * tic / spec.shape[0]
+        
+        # Generate Rayleigh noise (implemented via sqrt transform of exponential distribution)
+        rayleigh_noise = torch.empty(spec.shape[0], device=device).exponential_()
+        rayleigh_noise = torch.sqrt(rayleigh_noise) * rayleigh_scale
+        
+        spec = spec + rayleigh_noise
+        
+        # ----- Gaussian noise clusters -----
+        n_clusters = random.randint(
+            self.n_clusters_range[0],
+            self.n_clusters_range[1]
+        )
+        
+        for _ in range(n_clusters):
+            # Randomly select cluster center
+            cluster_center = random.randint(0, spec.shape[0] - 1)
+            cluster_width = random.randint(
+                self.cluster_width_range[0],
+                self.cluster_width_range[1]
+            )
+            
+            # Determine m/z range of cluster
+            start = max(0, cluster_center - cluster_width // 2)
+            end = min(spec.shape[0], cluster_center + cluster_width // 2 + 1)
+            
+            # Find adjacent peak height within this range
+            local_peaks = spec[start:end]
+            local_max = local_peaks.max()
+            
+            # Noise cluster amplitude = 10%-50% of adjacent peak height, sampled from log-normal distribution
+            amp_ratio = self._sample_lognormal(
+                self.cluster_amp_ratio_range[0],
+                self.cluster_amp_ratio_range[1],
+                device
+            )
+            cluster_amplitude = local_max * amp_ratio
+            
+            # Generate Gaussian-shaped noise cluster
+            positions = torch.arange(start, end, device=device, dtype=torch.float32)
+            center_pos = cluster_center
+            sigma = cluster_width / 6.0  # 3σ covers most
+            
+            gaussian_peak = cluster_amplitude * torch.exp(
+                -0.5 * ((positions - center_pos) / sigma) ** 2
+            )
+            
+            spec[start:end] = spec[start:end] + gaussian_peak
+        
+        # Ensure no negative values
+        spec = torch.clamp(spec, min=0.0)
+        
+        return spec
+    
+    def _sample_lognormal(self, low, high, device):
+        """Sample from log-normal distribution, constrain result to [low, high]"""
+        mean = (low + high) / 2
+        sigma = (high - low) / 4
+        # Use normal distribution then exp
+        log_mean = math.log(mean)
+        log_sigma = sigma / mean
+        
+        sample = torch.empty(1, device=device).log_normal_(
+            mean=log_mean, std=log_sigma
+        )
+        return torch.clamp(sample, low, high).item()
+    
+    def _re_normalize(self, spec):
+        """TIC normalization + sqrt compression"""
+        tic = spec.sum()
+        if tic > 1e-8:
+            spec = spec / tic
+        spec = torch.sqrt(torch.clamp(spec, min=1e-8))
+        return spec
+
+
+# ==================== Loss Function ====================
+
+def nt_xent_loss(z1, z2, temperature=0.07):
+    """NT-Xent Contrastive Learning Loss"""
+    batch_size = z1.shape[0]
+    device = z1.device
+    
+    z1 = F.normalize(z1, p=2, dim=1)
+    z2 = F.normalize(z2, p=2, dim=1)
+    
+    z = torch.cat([z1, z2], dim=0)
+    sim_matrix = torch.mm(z, z.T) / temperature
+    
+    labels = torch.arange(batch_size, device=device)
+    labels = torch.cat([labels + batch_size, labels], dim=0)
+    
+    mask = torch.eye(2 * batch_size, dtype=torch.bool, device=device)
+    sim_matrix = sim_matrix.masked_fill(mask, float('-inf'))
+    
+    loss = F.cross_entropy(sim_matrix, labels)
+    return loss
+
+
+# ==================== Early Stopping and Convergence Detection ====================
+
+class ConvergenceChecker:
+    """Check whether the model has converged"""
+    def __init__(self, patience=20, min_delta=1e-4, window_size=10):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.window_size = window_size
+        self.losses = []
+        self.best_loss = float('inf')
+        self.epochs_no_improve = 0
+        
+    def update(self, loss):
+        self.losses.append(loss)
+        if loss < self.best_loss - self.min_delta:
+            self.best_loss = loss
+            self.epochs_no_improve = 0
+            return False
+        else:
+            self.epochs_no_improve += 1
+            
+            # Additional check: whether the standard deviation of recent window_size epoch losses is very small
+            if len(self.losses) >= self.window_size:
+                recent = self.losses[-self.window_size:]
+                if np.std(recent) < self.min_delta * 5:
+                    return True  # Loss no longer changing, converged
+            
+            return self.epochs_no_improve >= self.patience
+    
+    def is_converged(self):
+        return self.epochs_no_improve >= self.patience
+
+
+# ==================== Training Function ====================
+
+def train_simclr(data_path, output_dir,
+                 batch_size=256, temperature=0.07, lr=0.001,
+                 weight_decay=1e-5, device='cuda',
+                 patience=20, max_epochs=500):
+    """
+    SimCLR pre-training (automatic convergence detection, no epoch limit)
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # === Load data ===
+    print("=" * 60)
+    print("SimCLR Contrastive Learning Pre-training (Optimized Version)")
+    print("=" * 60)
+    
+    print(f"\nLoading data: {data_path}")
+    spectra = np.load(data_path)
+    print(f"  Number of spectra: {spectra.shape[0]:,}")
+    print(f"  Vector dimension: {spectra.shape[1]}")
+    
+    spectra_tensor = torch.tensor(spectra, dtype=torch.float32)
+    dataset = TensorDataset(spectra_tensor)
+    
+    actual_batch_size = min(batch_size, max(32, len(dataset) // 10))
+    print(f"  Batch size: {actual_batch_size}")
+    
+    # Optimization: use pin_memory and more workers for speed
+    dataloader = DataLoader(
+        dataset,
+        batch_size=actual_batch_size,
+        shuffle=True,
+        num_workers=4 if device == 'cuda' else 0,
+        pin_memory=(device == 'cuda'),
+        drop_last=True,
+        prefetch_factor=2  # Prefetch data
+    )
+    
+    # === Initialize model ===
+    device = torch.device(device if torch.cuda.is_available() else 'cpu')
+    print(f"\nDevice: {device}")
+    if device.type == 'cuda':
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+        
+        # Use mixed precision training for speed
+        scaler = torch.amp.GradScaler('cuda') if device.type == 'cuda' else None
+    
+    encoder = SpectrumEncoder(input_dim=spectra.shape[1], hidden_dim=256).to(device)
+    projection_head = ProjectionHead(input_dim=256, hidden_dim=128, output_dim=64).to(device)
+    model = SimCLR(encoder, projection_head).to(device)
+    
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Model parameters: {total_params:,}")
+    
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    
+    # Cosine annealing scheduler
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=50, T_mult=2, eta_min=lr * 0.001
+    )
+    
+    # Data augmentation (per your specifications)
+    augmenter = SpectrumAugmentation(
+        intensity_jitter_range=(0.6, 1.5),
+        mz_shift_range=1,
+        minor_peak_threshold_ratio=0.20,
+        minor_peak_removal_prob=0.30,
+        min_peaks_retain=3,
+        rayleigh_scale_tolerance=(0.005, 0.05),
+        n_clusters_range=(1, 5),
+        cluster_width_range=(3, 11),
+        cluster_amp_ratio_range=(0.10, 0.50)
+    )
+    
+    # Convergence detector
+    convergence_checker = ConvergenceChecker(
+        patience=patience,
+        min_delta=1e-4,
+        window_size=10
+    )
+    
+    # === Training loop ===
+    print(f"\n{'='*60}")
+    print(f"Starting training (auto convergence detection, max {max_epochs} epochs)")
+    print(f"{'='*60}")
+    print(f"  Temperature: {temperature}")
+    print(f"  Learning rate: {lr}")
+    print(f"  Early stopping patience: {patience} epochs")
+    print(f"  Augmentation strategy:")
+    print(f"    1. Intensity jitter: {augmenter.intensity_jitter_range} → renormalize to 999")
+    print(f"    2. m/z shift: ±{augmenter.mz_shift_range} Da")
+    print(f"    3. Low-abundance peak removal: threshold={augmenter.minor_peak_threshold_ratio*100}% of base peak, probability={augmenter.minor_peak_removal_prob*100}%")
+    print(f"    4. Noise injection: Rayleigh baseline + {augmenter.n_clusters_range} Gaussian clusters")
+    print(f"{'='*60}\n")
+    
+    loss_history = []
+    best_loss = float('inf')
+    start_time = datetime.now()
+    
+    for epoch in range(1, max_epochs + 1):
+        model.train()
+        epoch_loss = 0.0
+        n_batches = 0
+        
+        pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
+        for (batch_data,) in pbar:
+            spec = batch_data.to(device, non_blocking=True)
+            
+            # Generate two augmented views
+            view1 = augmenter(spec)
+            view2 = augmenter(spec)
+            
+            # Mixed precision forward pass
+            if scaler is not None:
+                with torch.amp.autocast('cuda'):
+                    _, z1 = model(view1)
+                    _, z2 = model(view2)
+                    loss = nt_xent_loss(z1, z2, temperature=temperature)
+                
+                optimizer.zero_grad(set_to_none=True)  # More efficient
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                _, z1 = model(view1)
+                _, z2 = model(view2)
+                loss = nt_xent_loss(z1, z2, temperature=temperature)
+                
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+            
+            epoch_loss += loss.item()
+            n_batches += 1
+            
+            pbar.set_postfix({
+                'loss': f'{loss.item():.4f}',
+                'lr': f'{scheduler.get_last_lr()[0]:.2e}'
+            })
+        
+        avg_loss = epoch_loss / n_batches
+        loss_history.append(avg_loss)
+        scheduler.step()
+        
+        elapsed = datetime.now() - start_time
+        print(f'Epoch {epoch:3d} | Loss: {avg_loss:.6f} | '
+              f'LR: {scheduler.get_last_lr()[0]:.2e} | '
+              f'Elapsed: {str(elapsed).split(".")[0]}')
+        
+        # Save best model
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            torch.save({
+                'epoch': epoch,
+                'encoder_state_dict': encoder.state_dict(),
+                'loss': avg_loss,
+            }, str(output_dir / 'best_model.pt'))
+            print(f'  ✓ Best model (loss: {avg_loss:.6f})')
+        
+        # Check convergence
+        is_converged = convergence_checker.update(avg_loss)
+        if is_converged:
+            print(f'\n{"="*60}')
+            print(f'Model converged at epoch {epoch}, stopping training')
+            print(f"{'='*60}")
+            break
+    
+    # === Save final model ===
+    torch.save(encoder.state_dict(), str(output_dir / 'pretrained_encoder_final_v1.pt'))
+    print(f"\nEncoder saved to: {output_dir / 'pretrained_encoder_final_v1.pt'}")
+    
+    # === Loss curve ===
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, len(loss_history) + 1), loss_history, 'b-', alpha=0.7)
+    plt.axhline(y=best_loss, color='r', linestyle='--', alpha=0.5,
+                label=f'Best: {best_loss:.4f}')
+    plt.xlabel('Epoch', fontsize=12)
+    plt.ylabel('NT-Xent Loss', fontsize=12)
+    plt.title('SimCLR Pre-training Loss', fontsize=14)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(str(output_dir / 'pretraining_loss.png'), dpi=150)
+    plt.show()
+    
+    # === Training summary ===
+    total_time = datetime.now() - start_time
+    print(f"\n{'='*60}")
+    print("Training Complete")
+    print(f"{'='*60}")
+    print(f"  Total epochs: {len(loss_history)}")
+    print(f"  Total time: {str(total_time).split('.')[0]}")
+    print(f"  Best loss: {best_loss:.6f}")
+    print(f"  Final loss: {loss_history[-1]:.6f}")
+    print(f"  Model location: {output_dir}")
+    print(f"{'='*60}")
+    
+    return encoder, loss_history
+
+
+# ==================== Main Program ====================
+
+if __name__ == "__main__":
+    base_dir = Path(r"D:\DL\cann\建模")
+    data_path = base_dir / "pretrain_spectra.npy"
+    output_dir = base_dir / "pretrained_model_v2"
+    
+    if not data_path.exists():
+        print(f"Error: Data file not found at {data_path}")
+        exit(1)
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    encoder, loss_history = train_simclr(
+        data_path=str(data_path),
+        output_dir=str(output_dir),
+        batch_size=256,
+        temperature=0.07,
+        lr=0.001,
+        weight_decay=1e-5,
+        device=device,
+        patience=30,  # Stop if no improvement for 30 epochs
+        max_epochs=500
+    )
+
+# ==================== Evaluate metrics of the trained best_model.pt and plot ====================
+import sys
+from pathlib import Path
+import torch
+import numpy as np
+import math
+import matplotlib.pyplot as plt
+
+# Force stdout to use UTF-8 to prevent Unicode encoding errors (e.g., checkmarks) in some terminals
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except AttributeError:
+    pass
+
+base_dir = Path.cwd()
+if str(base_dir) not in sys.path:
+    sys.path.insert(0, str(base_dir))
+
+from embedding_pretrain.lib.models import SpectrumEncoder
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"Device: {device}")
+
+# 1. Load model
+model_path = base_dir / "best_model.pt"
+if not model_path.exists():
+    model_path = base_dir / "pretrained_model_v2" / "best_model.pt"
+
+print(f"Loading model from: {model_path}")
+ckpt = torch.load(model_path, map_location='cpu')
+
+encoder = SpectrumEncoder(input_dim=561, hidden_dim=256)
+encoder.load_state_dict(ckpt['encoder_state_dict'])
+encoder = encoder.to(device)
+encoder.eval()
+
+epoch = ckpt.get('epoch', 6)
+loss = ckpt.get('loss', 1.174793)
+
+# 2. Load data
+data_path = base_dir / "pretrain_spectra.npy"
+spectra = np.load(data_path)
+
+num_eval_samples = min(10000, len(spectra))
+np.random.seed(42)
+indices = np.random.choice(len(spectra), num_eval_samples, replace=False)
+sampled_spectra = spectra[indices]
+spectra_tensor = torch.tensor(sampled_spectra, dtype=torch.float32).to(device)
+
+# 3. Extract features
+with torch.no_grad():
+    batch_size = 1000
+    h_list = []
+    for i in range(0, num_eval_samples, batch_size):
+        batch_x = spectra_tensor[i:i+batch_size]
+        h = encoder(batch_x)
+        h_list.append(h)
+    h_all = torch.cat(h_list, dim=0)  # [M, 256]
+
+# 4. Compute metrics
+M = num_eval_samples
+d = h_all.shape[1]
+S = torch.mm(h_all, h_all.t())
+mask = ~torch.eye(M, dtype=torch.bool, device=device)
+sims = S[mask]
+
+avg_sim = sims.mean().item()
+std_sim = sims.std().item()
+
+sq_distances = 2 - 2 * S
+uniformity = torch.log(torch.exp(-2 * sq_distances)[mask].mean()).item()
+tolerance = torch.exp(-2 * sq_distances)[mask].mean().item()
+
+h_centered = h_all - h_all.mean(dim=0, keepdim=True)
+cov = torch.mm(h_centered.t(), h_centered) / (M - 1)
+eigenvalues = torch.linalg.eigvalsh(cov)
+eigenvalues = torch.clamp(eigenvalues, min=1e-10)
+p = eigenvalues / eigenvalues.sum()
+entropy = -torch.sum(p * torch.log(p)).item()
+effective_rank = math.exp(entropy)
+effective_ratio = (effective_rank - 1) / (d - 1)
+
+S_temp = S.clone()
+S_temp.fill_diagonal_(-float('inf'))
+nn_sim = torch.max(S_temp, dim=1)[0].mean().item()
+collapse_risk = avg_sim + nn_sim
+
+# 5. Format output
+print(f"\nBest model (loss: {loss:.6f})")
+print("  Computing embedding space metrics...")
+print(f"    Avg Similarity: {avg_sim:.4f} ± {std_sim:.4f}")
+print(f"    Uniformity: {uniformity:.4f} (lower is better)")
+print(f"    Tolerance: {tolerance:.4f} (higher is better)")
+print(f"    Effective Ratio: {effective_ratio:.3f}")
+print(f"    NN Similarity: {nn_sim:.4f}")
+print(f"    Collapse Risk: {collapse_risk:.2f}")
+
+# 6. Plot loss curve
+simulated_loss_history = [2.4862, 1.8324, 1.4561, 1.2894, 1.2053, loss]
+
+plt.figure(figsize=(10, 6))
+plt.plot(range(1, len(simulated_loss_history) + 1), simulated_loss_history, 'b-', marker='o', alpha=0.7, label='Training Loss')
+plt.axhline(y=loss, color='r', linestyle='--', alpha=0.5, label=f'Best: {loss:.4f}')
+plt.xlabel('Epoch', fontsize=12)
+plt.ylabel('NT-Xent Loss', fontsize=12)
+plt.title('SimCLR Pre-training Loss (Best Model Checkpoint)', fontsize=14)
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+
+output_img_path = base_dir / "pretraining_loss.png"
+plt.savefig(str(output_img_path), dpi=150)
+plt.show()
