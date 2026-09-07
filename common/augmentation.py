@@ -5,16 +5,18 @@ import torch
 
 class SpectrumAugmentation:
     """
-    统一的 GC-EI 质谱数据增强流 (全量 GPU Tensor 2D Batch 矩阵向量化加速)
+    Unified GC-EI mass spectrum data augmentation pipeline (fully GPU Tensor 2D Batch matrix vectorized acceleration)
     
-    支持三种工作模式：
-    - 'pretrain': 预训练全量增强模式（包含强度抖动、m/z 偏移、残基峰移除、瑞利基线与高斯噪声簇）
-    - 'finetune_train': 后训练轻量增强模式（轻微强度抖动与基线噪声，防止微调过拟合）
-    - 'eval': 评估/推理模式（恒等映射，不进行任何增强变化）
+    Supports three operating modes:
+    - 'pretrain': Full pretraining augmentation mode (includes intensity jitter, m/z shift, 
+                   residual peak removal, Rayleigh baseline and Gaussian noise clusters)
+    - 'finetune_train': Lightweight fine-tuning augmentation mode (mild intensity jitter and 
+                        baseline noise to prevent overfitting during fine-tuning)
+    - 'eval': Evaluation/inference mode (identity mapping, no augmentation applied)
     """
     def __init__(self,
                  mode='pretrain',
-                 # 预训练强度抖动与重归一化
+                 # Pretraining intensity jitter and renormalization
                  pretrain_jitter_range=(0.6, 1.5),
                  mz_shift_range=1,
                  minor_peak_threshold_ratio=0.20,
@@ -24,7 +26,7 @@ class SpectrumAugmentation:
                  n_clusters_range=(1, 5),
                  cluster_width_range=(3, 11),
                  cluster_amp_ratio_range=(0.10, 0.50),
-                 # 微调轻量增强参数
+                 # Fine-tuning lightweight augmentation parameters
                  finetune_jitter_range=(0.85, 1.15),
                  finetune_rayleigh_scale=(0.001, 0.01)
                 ):
@@ -42,13 +44,13 @@ class SpectrumAugmentation:
         self.finetune_jitter_range = finetune_jitter_range
         self.finetune_rayleigh_scale = finetune_rayleigh_scale
 
-        # 预先计算高斯噪声簇采样的 lognormal 参数
+        # Pre-compute lognormal parameters for Gaussian noise cluster sampling
         mean = (self.cluster_amp_ratio_range[0] + self.cluster_amp_ratio_range[1]) / 2.0
         sigma_val = (self.cluster_amp_ratio_range[1] - self.cluster_amp_ratio_range[0]) / 4.0
         self.log_mean = math.log(mean)
         self.log_sigma = sigma_val / mean
         
-        # GPU 静态位置张量缓存
+        # GPU static position tensor cache
         self._pos_cache = {}
 
     def __call__(self, spectrum: torch.Tensor) -> torch.Tensor:
@@ -63,31 +65,31 @@ class SpectrumAugmentation:
             
         device = spec.device
         
-        # 1. 还原到线性强度空间 (平方)
+        # 1. Restore to linear intensity space (square)
         spec = spec ** 2
 
         if self.mode == 'pretrain':
-            # 维度 1: 强度抖动 + 重归一化到 999 (Sample-wise 抖动，保护拓扑结构)
+            # Dimension 1: Intensity jitter + renormalize to 999 (Sample-wise jitter, preserving topology)
             spec = self._intensity_jitter_with_renorm(spec, self.pretrain_jitter_range, device)
-            # 维度 2: m/z 整体偏移 (Vectorized gather)
+            # Dimension 2: m/z global shift (Vectorized gather)
             spec = self._mz_shift(spec, device)
-            # 维度 3: 低丰度残基峰概率移除 (Vectorized mask)
+            # Dimension 3: Probabilistic removal of low-abundance residual peaks (Vectorized mask)
             spec = self._remove_minor_peaks(spec, device)
-            # 维度 4: 瑞利 + 高斯噪声注入 (Vectorized Batch noise)
+            # Dimension 4: Rayleigh + Gaussian noise injection (Vectorized Batch noise)
             spec = self._inject_noise(spec, device)
         elif self.mode == 'finetune_train':
-            # 后训练轻量增强：Sample-wise 轻微强度抖动与微弱基线噪声
+            # Fine-tuning lightweight augmentation: Sample-wise mild intensity jitter and weak baseline noise
             spec = self._intensity_jitter(spec, self.finetune_jitter_range, device)
             spec = self._inject_rayleigh_noise(spec, self.finetune_rayleigh_scale, device)
             
-        # 重新进行 TIC 归一化 + 平方根缩放
+        # Re-apply TIC normalization + square root scaling
         res = self._re_normalize(spec)
         return res.squeeze(0) if is_1d else res
 
     def _intensity_jitter_with_renorm(self, spec: torch.Tensor, jitter_range: tuple, device: torch.device) -> torch.Tensor:
         """
-        Sample-wise 强度抖动 + 重归一化到 999
-        对每个样本整体乘以一个随机标量 (B, 1)，保持不同 m/z 峰之间的相对比例
+        Sample-wise intensity jitter + renormalization to 999
+        Multiplies each sample by a random scalar (B, 1), preserving relative ratios across different m/z peaks
         """
         B = spec.shape[0]
         jitter_factors = torch.empty((B, 1), device=device).uniform_(
@@ -101,7 +103,7 @@ class SpectrumAugmentation:
         return spec
 
     def _intensity_jitter(self, spec: torch.Tensor, jitter_range: tuple, device: torch.device) -> torch.Tensor:
-        """Sample-wise 强度抖动 (B, 1)"""
+        """Sample-wise intensity jitter (B, 1)"""
         B = spec.shape[0]
         jitter_factors = torch.empty((B, 1), device=device).uniform_(
             jitter_range[0], jitter_range[1]
@@ -110,8 +112,8 @@ class SpectrumAugmentation:
 
     def _mz_shift(self, spec: torch.Tensor, device: torch.device) -> torch.Tensor:
         """
-        全量向量化 m/z 整体偏移 ±mz_shift_range
-        使用 torch.gather 在 GPU 上一次性完成 Batch 内每个样本的独立随机偏移
+        Fully vectorized m/z global shift of ±mz_shift_range
+        Uses torch.gather to perform independent random shifts for each sample in the batch on GPU in one pass
         """
         if self.mz_shift_range <= 0:
             return spec
@@ -130,10 +132,10 @@ class SpectrumAugmentation:
 
     def _remove_minor_peaks(self, spec: torch.Tensor, device: torch.device) -> torch.Tensor:
         """
-        低丰度峰概率性移除 (全向量化)
-        1. 动态阈值 = 各样本基峰强度 × 20%
-        2. 低于阈值的非零峰中，以 30% 概率移除
-        3. 约束条件：确保移除后每个样本至少保留 min_peaks_retain 个峰
+        Probabilistic removal of low-abundance peaks (fully vectorized)
+        1. Dynamic threshold = 20% of each sample's base peak intensity
+        2. Each peak below threshold has 30% probability of removal
+        3. Constraint: Ensure at least min_peaks_retain peaks remain per sample
         """
         B, N = spec.shape
         base_peaks = spec.max(dim=1, keepdim=True).values  # (B, 1)
@@ -153,7 +155,7 @@ class SpectrumAugmentation:
         return torch.where(final_removal, 0.0, spec)
 
     def _inject_rayleigh_noise(self, spec: torch.Tensor, scale_tolerance: tuple, device: torch.device) -> torch.Tensor:
-        """全向量化瑞利基线噪声注入"""
+        """Fully vectorized Rayleigh baseline noise injection"""
         B, N = spec.shape
         spec_max = spec.max(dim=1, keepdim=True).values
         mask = (spec_max > 1e-8)
@@ -171,7 +173,10 @@ class SpectrumAugmentation:
         return torch.where(mask, noisy_spec, spec)
 
     def _inject_noise(self, spec: torch.Tensor, device: torch.device) -> torch.Tensor:
-        """差异化噪声注入：瑞利基线噪声 + 高斯噪声簇 (全 Batch GPU 并行与缓存复用)"""
+        """
+        Differentiated noise injection: Rayleigh baseline noise + Gaussian noise clusters
+        (Full Batch GPU parallelization with cache reuse)
+        """
         B, N = spec.shape
         spec = self._inject_rayleigh_noise(spec, self.rayleigh_scale_tolerance, device)
         
@@ -210,7 +215,7 @@ class SpectrumAugmentation:
         return torch.clamp(spec, min=0.0)
 
     def _re_normalize(self, spec: torch.Tensor) -> torch.Tensor:
-        """TIC 归一化 + sqrt 压缩 (全向量化)"""
+        """TIC normalization + sqrt compression (fully vectorized)"""
         tic = spec.sum(dim=1, keepdim=True)
         mask = (tic > 1e-8)
         spec_norm = torch.where(mask, spec / (tic + 1e-12), spec)

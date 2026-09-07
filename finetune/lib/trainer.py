@@ -8,7 +8,7 @@ from sklearn.metrics import roc_auc_score
 
 
 def safe_auc(labels, probs):
-    """数值安全的 AUC 计算"""
+    """Numerically safe AUC computation"""
     labels = np.asarray(labels).ravel()
     probs = np.asarray(probs).ravel()
     if len(np.unique(labels)) < 2:
@@ -22,13 +22,13 @@ def safe_auc(labels, probs):
 def train_binary_classifier(
     model, train_loader, val_loader, 
     device='cuda', epochs=100, lr=0.001, patience=15, 
-    max_grad_norm=1.0, pos_weight=math.sqrt(1.8)
+    max_grad_norm=1.0
 ):
     """
-    标准的 PyTorch 二分类器微调训练流程
+    Standard PyTorch binary classifier fine-tuning training pipeline
     """
     dev = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
-    print(f"训练执行设备: {dev}")
+    print(f"Training device: {dev}")
     model = model.to(dev)
     
     optimizer = torch.optim.AdamW(
@@ -39,12 +39,7 @@ def train_binary_classifier(
         optimizer, mode='min', factor=0.5, patience=5, min_lr=1e-6
     )
     
-    if pos_weight is not None and pos_weight != 1.0:
-        pw_tensor = torch.tensor([pos_weight], device=dev, dtype=torch.float32)
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pw_tensor)
-        print(f"  [INFO] 启用正样本损失加权 pos_weight = {pos_weight:.4f}")
-    else:
-        criterion = nn.BCEWithLogitsLoss()
+    criterion = nn.BCEWithLogitsLoss()
     
     best_val_loss = float('inf')
     best_classifier_state = None
@@ -55,7 +50,7 @@ def train_binary_classifier(
     train_aucs, val_aucs = [], []
     
     for epoch in range(1, epochs + 1):
-        # ===== 训练阶段 =====
+        # ===== Training phase =====
         model.train()
         train_loss, train_correct, train_total = 0.0, 0, 0
         train_probs_all, train_labels_all = [], []
@@ -88,7 +83,7 @@ def train_binary_classifier(
         train_accs.append(train_acc)
         train_aucs.append(safe_auc(train_labels_all, train_probs_all))
         
-        # ===== 验证阶段 =====
+        # ===== Validation phase =====
         model.eval()
         val_loss, val_correct, val_total = 0.0, 0, 0
         val_probs_all, val_labels_all = [], []
@@ -129,13 +124,13 @@ def train_binary_classifier(
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"\n触发早停机制，停止于 epoch {epoch}", flush=True)
+                print(f"\nEarly stopping triggered at epoch {epoch}", flush=True)
                 break
     
     if best_classifier_state is not None:
         model.classifier.load_state_dict(best_classifier_state)
         
-    print(f"  [OK] 最佳分类头权重已恢复 (最佳 Val Loss: {best_val_loss:.4f})", flush=True)
+    print(f"  [OK] Best classifier weights restored (Best Val Loss: {best_val_loss:.4f})", flush=True)
     
     history = {
         'train_loss': train_losses,

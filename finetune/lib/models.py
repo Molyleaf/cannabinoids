@@ -8,7 +8,7 @@ from embedding_pretrain.lib.models import SpectrumEncoder
 
 
 class BinaryClassifier(nn.Module):
-    """二分类模型（挂载在质谱编码器之上）"""
+    """Binary classification model built on top of the spectrum encoder"""
     def __init__(self, encoder, input_dim=256, freeze_encoder=True):
         super().__init__()
         self.encoder = encoder
@@ -45,13 +45,13 @@ class BinaryClassifier(nn.Module):
 
 
 def load_pretrained_encoder(encoder_path, input_dim=561, hidden_dim=256, device='cuda'):
-    """实例化 SpectrumEncoder 并加载预训练权重"""
+    """Instantiate SpectrumEncoder and load pretrained weights"""
     dev = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
     encoder = SpectrumEncoder(input_dim=input_dim, hidden_dim=hidden_dim).to(dev)
     
     encoder_path = Path(encoder_path)
     if not encoder_path.exists():
-        raise FileNotFoundError(f"未找到预训练模型文件: {encoder_path}")
+        raise FileNotFoundError(f"Pretrained model file not found: {encoder_path}")
         
     checkpoint = torch.load(str(encoder_path), map_location=dev, weights_only=False)
     
@@ -69,7 +69,7 @@ def load_pretrained_encoder(encoder_path, input_dim=561, hidden_dim=256, device=
     else:
         state_dict = checkpoint
         
-    # 清理 key 前缀
+    # Clean up key prefixes
     cleaned_state_dict = {}
     for k, v in state_dict.items():
         new_k = k
@@ -80,19 +80,19 @@ def load_pretrained_encoder(encoder_path, input_dim=561, hidden_dim=256, device=
         cleaned_state_dict[new_k] = v
         
     missing_keys, unexpected_keys = encoder.load_state_dict(cleaned_state_dict, strict=False)
-    print(f"  [OK] 成功加载预训练权重: {encoder_path}")
+    print(f"  [OK] Successfully loaded pretrained weights: {encoder_path}")
     if missing_keys:
-        print(f"    [WARN] 缺失键: {missing_keys}")
+        print(f"    [WARN] Missing keys: {missing_keys}")
     if unexpected_keys:
-        print(f"    [WARN] 忽略多余键: {unexpected_keys[:3]}...")
+        print(f"    [WARN] Ignored unexpected keys: {unexpected_keys[:3]}...")
         
     return encoder
 
 
 def save_model_checkpoint(obj, target_dir):
     """
-    保存模型权重至全新时间戳文件 (如 binary_classifier_20260722_210500.pt)
-    不试图覆盖已占用的固化文件名，彻底规避文件锁定冲突。
+    Save model weights to a new timestamped file (e.g., binary_classifier_20260722_210500.pt)
+    Does not attempt to overwrite existing fixed filenames, completely avoiding file lock conflicts.
     """
     target_dir = Path(target_dir)
     if target_dir.is_file() or target_dir.suffix == '.pt':
@@ -103,5 +103,5 @@ def save_model_checkpoint(obj, target_dir):
     save_path = target_dir / f"binary_classifier_{timestamp}.pt"
     
     torch.save(obj, str(save_path))
-    print(f"  [OK] 模型权重已保存至全新时间戳文件: {save_path}", flush=True)
+    print(f"  [OK] Model weights saved to timestamped file: {save_path}", flush=True)
     return save_path

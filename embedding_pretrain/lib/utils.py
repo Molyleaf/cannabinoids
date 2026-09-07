@@ -3,7 +3,7 @@ import numpy as np
 
 
 class ConvergenceChecker:
-    """检测模型是否拟合"""
+    """Check whether the model has converged"""
     def __init__(self, patience=20, min_delta=1e-4, window_size=10):
         self.patience = patience
         self.min_delta = min_delta
@@ -21,19 +21,20 @@ class ConvergenceChecker:
         else:
             self.epochs_no_improve += 1
             
-            # 额外检查：最近window_size个epoch的损失标准差是否很小
+            # Additional check: whether the standard deviation of recent window_size epoch losses is very small
             if len(self.losses) >= self.window_size:
                 recent = self.losses[-self.window_size:]
                 if np.std(recent) < self.min_delta * 5:
-                    return True  # 损失不再变化，已拟合
+                    return True  # Loss no longer changing, converged
             
             return self.epochs_no_improve >= self.patience
     
     def is_converged(self):
         return self.epochs_no_improve >= self.patience
 
+
 def plot_loss_history(loss_history, best_loss, output_path):
-    """绘制并保存损失曲线 (同时保存 CSV 文件与 PNG 图片)"""
+    """Plot and save loss curve (exports both CSV and PNG files)"""
     import pandas as pd
     from pathlib import Path
 
@@ -45,7 +46,7 @@ def plot_loss_history(loss_history, best_loss, output_path):
         'loss': loss_history
     })
     df.to_csv(csv_path, index=False)
-    print(f"[OK] 已导出预训练 Loss 数据至 CSV: {csv_path}")
+    print(f"[OK] Pre-training loss data exported to CSV: {csv_path}")
 
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, len(loss_history) + 1), loss_history, 'b-', alpha=0.7)
@@ -59,4 +60,3 @@ def plot_loss_history(loss_history, best_loss, output_path):
     plt.tight_layout()
     plt.savefig(str(out_p), dpi=150)
     plt.close()
-

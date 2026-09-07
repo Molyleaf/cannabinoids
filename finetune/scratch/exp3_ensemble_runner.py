@@ -15,7 +15,7 @@ import torch.nn as nn
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score
 from torch.utils.data import DataLoader, Dataset
 
-# 动态确保项目根目录在 python 模块搜索路径中
+# Dynamically ensure project root is in Python module search path
 scratch_dir = Path(__file__).resolve().parent
 finetune_dir = scratch_dir.parent
 project_root = finetune_dir.parent
@@ -40,7 +40,7 @@ from finetune.lib.trainer import safe_auc
 
 class FocalLoss(nn.Module):
     """
-    Focal Loss (带有正样本权重 pos_weight 调节)
+    Focal Loss (with pos_weight adjustment)
     FL(p_t) = - alpha_t * (1 - p_t)^gamma * log(p_t)
     """
     def __init__(self, gamma=2.0, pos_weight=math.sqrt(1.8)):
@@ -68,8 +68,8 @@ class FocalLoss(nn.Module):
 
 class AugmentedSpectrumDataset(Dataset):
     """
-    支持动态质谱数据增强的 PyTorch Dataset
-    在训练迭代的 __getitem__ 中按批次随机施加 SpectrumAugmentation
+    PyTorch Dataset supporting dynamic mass spectrum data augmentation
+    Applies SpectrumAugmentation on-the-fly during training iteration in __getitem__
     """
     def __init__(self, X, y, augmentor=None):
         self.X = torch.tensor(X, dtype=torch.float32)
@@ -115,7 +115,7 @@ def train_single_fold_model(
     train_losses, val_losses = [], []
     train_accs, val_accs = [], []
 
-    # 阶段 1: Warmup Classifier
+    # Stage 1: Warmup Classifier
     model.freeze_encoder = True
     for param in model.encoder.parameters():
         param.requires_grad = False
@@ -143,7 +143,7 @@ def train_single_fold_model(
             train_correct += (preds == batch_labels).sum().item()
             train_total += batch_spec.size(0)
 
-        # Val evaluation
+        # Validation evaluation
         model.eval()
         val_loss, val_correct, val_total = 0.0, 0, 0
         with torch.no_grad():
@@ -161,7 +161,7 @@ def train_single_fold_model(
             best_val_loss = avg_val_loss
             best_model_state = copy.deepcopy(model.state_dict())
 
-    # 阶段 2: Unfreeze Joint Fine-Tuning
+    # Stage 2: Unfreeze Joint Fine-Tuning
     model.freeze_encoder = False
     for param in model.encoder.parameters():
         param.requires_grad = True
@@ -195,7 +195,7 @@ def train_single_fold_model(
             train_correct += (preds == batch_labels).sum().item()
             train_total += batch_spec.size(0)
 
-        # Val evaluation
+        # Validation evaluation
         model.eval()
         val_loss, val_correct, val_total = 0.0, 0, 0
         with torch.no_grad():
@@ -228,7 +228,7 @@ def train_single_fold_model(
 
 def evaluate_ensemble_predictions(models, data_loader, device='cuda', threshold=0.5):
     """
-    计算 5 个 Fold 模型的 Soft-Voting 集成预测概率与评估指标
+    Compute Soft-Voting ensemble predictions and evaluation metrics from 5 Fold models
     """
     dev = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
     for m in models:
@@ -249,7 +249,7 @@ def evaluate_ensemble_predictions(models, data_loader, device='cuda', threshold=
                 probs = torch.sigmoid(logits)
                 batch_probs_list.append(probs.cpu().numpy().ravel())
 
-            # Soft Voting 集成：计算 5 个模型预测概率的均值
+            # Soft Voting ensemble: average prediction probabilities across 5 models
             mean_probs = np.mean(batch_probs_list, axis=0)
             all_ensemble_probs.extend(mean_probs)
             all_labels.extend(batch_labels.cpu().numpy().ravel())
@@ -347,12 +347,12 @@ def plot_threshold_search_curve(records, best_th, output_dir):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="高性能 5-Fold 解冻微调 + 动态增强 + Soft Voting 集成")
+    parser = argparse.ArgumentParser(description="High-performance 5-Fold Unfreeze Fine-Tuning + Dynamic Augmentation + Soft Voting Ensemble")
     parser.add_argument(
         "--encoder_path",
         type=str,
         default=str(project_root / "embedding_pretrain" / "results_20260725_095428" / "best_model.pt"),
-        help="基础预训练编码器权重 (best_model.pt)"
+        help="Base pre-trained encoder weights (best_model.pt)"
     )
     parser.add_argument("--n_folds", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=128)
@@ -366,19 +366,19 @@ def main():
 
     encoder_path = Path(args.encoder_path)
     if not encoder_path.exists():
-        raise FileNotFoundError(f"未找到指定的预训练权重文件: {encoder_path}")
+        raise FileNotFoundError(f"Pre-trained weights file not found: {encoder_path}")
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     print("=" * 75, flush=True)
-    print("【冲击 95%+ Acc 终极实验】5-Fold SMILES 交叉验证 + 动态质谱增强 + Focal Loss + Soft Voting 集成", flush=True)
+    print("[Ultimate Experiment] 5-Fold SMILES Cross-Validation + Dynamic Augmentation + Focal Loss + Soft Voting Ensemble", flush=True)
     print("=" * 75, flush=True)
-    print(f"基础预训练模型: {encoder_path}", flush=True)
-    print(f"运行设备: {device.upper()}", flush=True)
+    print(f"Base pre-trained model: {encoder_path}", flush=True)
+    print(f"Device: {device.upper()}", flush=True)
     if device == 'cuda':
-        print(f"显卡型号: {torch.cuda.get_device_name(0)}", flush=True)
+        print(f"GPU: {torch.cuda.get_device_name(0)}", flush=True)
 
-    # 1. 准备全量特征与索引划分 (保留全局固定 15% 独立测试集)
+    # 1. Prepare full feature matrix and index splits (reserve fixed 15% independent test set)
     _, _, _, test_loader, meta = prepare_finetune_dataset(
         batch_size=args.batch_size,
         test_size=0.15,
@@ -391,10 +391,10 @@ def main():
     train_val_idx = np.concatenate([meta['train_idx'], meta['val_idx']])
     test_idx = meta['test_idx']
 
-    print(f"  开发池 (Train+Val Pool): {len(train_val_idx)} 条", flush=True)
-    print(f"  独立测试集 (Test Set):   {len(test_idx)} 条", flush=True)
+    print(f"  Development Pool (Train+Val): {len(train_val_idx)} samples", flush=True)
+    print(f"  Independent Test Set:         {len(test_idx)} samples", flush=True)
 
-    # 在开发池上构建 5-Fold K-Fold 索引
+    # Build 5-Fold K-Fold indices on the development pool
     np.random.seed(42)
     pool_indices = train_val_idx.copy()
     np.random.shuffle(pool_indices)
@@ -406,14 +406,14 @@ def main():
         end_k = (k + 1) * fold_size if k < args.n_folds - 1 else len(pool_indices)
         folds_idx.append(pool_indices[start_k:end_k])
 
-    # 数据增强器 (仅应用于训练集)
+    # Data augmentor (applied only to training set)
     finetune_augmentor = SpectrumAugmentation(mode='finetune_train')
 
     models = []
     fold_metrics = []
 
     print("\n" + "=" * 75, flush=True)
-    print(f"Step 2: 顺序训练 {args.n_folds}-Fold 模型 (两阶段解冻 + 动态数据增强 + Focal Loss)", flush=True)
+    print(f"Step 2: Sequentially training {args.n_folds}-Fold models (Two-Stage Unfreeze + Dynamic Augmentation + Focal Loss)", flush=True)
     print("=" * 75, flush=True)
 
     for k in range(args.n_folds):
@@ -426,11 +426,11 @@ def main():
         train_loader_k = DataLoader(train_ds_k, batch_size=args.batch_size, shuffle=True)
         val_loader_k = DataLoader(val_ds_k, batch_size=args.batch_size, shuffle=False)
 
-        # 为当前 Fold 初始化并加载独立的 Encoder 权重
+        # Initialize and load independent encoder weights for this Fold
         encoder_k = load_pretrained_encoder(encoder_path, input_dim=561, hidden_dim=256, device=device)
         model_k = BinaryClassifier(encoder_k, input_dim=256, freeze_encoder=True)
 
-        print(f"\n>>> 正在训练 Fold {k+1}/{args.n_folds} (Train: {len(train_ds_k)} 条, Val: {len(val_ds_k)} 条)...", flush=True)
+        print(f"\n>>> Training Fold {k+1}/{args.n_folds} (Train: {len(train_ds_k)} samples, Val: {len(val_ds_k)} samples)...", flush=True)
         model_k, best_val_loss_k = train_single_fold_model(
             model=model_k,
             train_loader=train_loader_k,
@@ -446,11 +446,11 @@ def main():
         )
 
         models.append(model_k)
-        print(f"    [Fold {k+1} OK] 最佳 Val Loss: {best_val_loss_k:.4f}", flush=True)
+        print(f"    [Fold {k+1} OK] Best Val Loss: {best_val_loss_k:.4f}", flush=True)
 
-    # 3. 在 5-Fold 上进行开发池 Validation 集成阈值寻优
+    # 3. Threshold optimization on development pool validation set using 5-Fold ensemble
     print("\n" + "=" * 75, flush=True)
-    print("Step 3: 5-Fold 集成模型在开发池验证集上的决策阈值寻优", flush=True)
+    print("Step 3: Decision threshold optimization on development pool using 5-Fold ensemble", flush=True)
     print("=" * 75, flush=True)
 
     val_pool_ds = AugmentedSpectrumDataset(X[train_val_idx], y[train_val_idx], augmentor=None)
@@ -459,28 +459,28 @@ def main():
     val_ensemble_res = evaluate_ensemble_predictions(models, val_pool_loader, device=device, threshold=0.50)
     best_th, best_f1, th_records = find_optimal_threshold(val_ensemble_res, metric='f1')
 
-    print(f"  [5-Fold 集成寻优结果]:", flush=True)
-    print(f"     基准默认阈值 (T=0.50): Acc: {val_ensemble_res['accuracy']:.2%} | F1: {val_ensemble_res['f1']:.4f} | AUC: {val_ensemble_res['auc']:.4f}", flush=True)
-    print(f"     最佳搜寻阈值 (T_opt={best_th:.2f}): F1: {best_f1:.4f}", flush=True)
+    print(f"  [5-Fold Ensemble Optimization Results]:", flush=True)
+    print(f"     Default threshold (T=0.50): Acc: {val_ensemble_res['accuracy']:.2%} | F1: {val_ensemble_res['f1']:.4f} | AUC: {val_ensemble_res['auc']:.4f}", flush=True)
+    print(f"     Optimal threshold (T_opt={best_th:.2f}): F1: {best_f1:.4f}", flush=True)
 
-    # 4. 在独立测试集 (Test Set) 上评估 Soft-Voting 集成效果
+    # 4. Ultimate evaluation on independent test set using Soft-Voting ensemble
     print("\n" + "=" * 75, flush=True)
-    print("Step 4: 独立测试集 (Test Set) 终极评估 (Soft Voting 集成预测)", flush=True)
+    print("Step 4: Ultimate evaluation on independent test set (Soft Voting ensemble prediction)", flush=True)
     print("=" * 75, flush=True)
 
     test_ensemble_05 = evaluate_ensemble_predictions(models, test_loader, device=device, threshold=0.50)
     test_ensemble_opt = evaluate_ensemble_predictions(models, test_loader, device=device, threshold=best_th)
 
     print("\n" + "=" * 75, flush=True)
-    print(f"【终极测试集 Soft Voting 集成结果 (T=0.50)】", flush=True)
-    print(f"  Accuracy:  {test_ensemble_05['accuracy']:.2%}  (突破 95% 目标对比)")
+    print(f"[Ultimate Test Set Soft Voting Ensemble Results (T=0.50)]", flush=True)
+    print(f"  Accuracy:  {test_ensemble_05['accuracy']:.2%}  (Target: 95%+)")
     print(f"  Precision: {test_ensemble_05['precision']:.2%}")
     print(f"  Recall:    {test_ensemble_05['recall']:.2%}")
     print(f"  F1-Score:  {test_ensemble_05['f1']:.4f}")
     print(f"  AUC:       {test_ensemble_05['auc']:.4f}")
     print("=" * 75 + "\n", flush=True)
 
-    print(f"【终极测试集 Soft Voting 集成结果 (T_opt={best_th:.2f})】", flush=True)
+    print(f"[Ultimate Test Set Soft Voting Ensemble Results (T_opt={best_th:.2f})]", flush=True)
     print(f"  Accuracy:  {test_ensemble_opt['accuracy']:.2%}")
     print(f"  Precision: {test_ensemble_opt['precision']:.2%}")
     print(f"  Recall:    {test_ensemble_opt['recall']:.2%}")
@@ -505,16 +505,16 @@ def main():
         threshold=best_th
     )
 
-    # 5. 保存模型与导出对比结果
+    # 5. Save models and export results
     print("\n" + "=" * 75, flush=True)
-    print("Step 5: 保存 5-Fold 集成模型权重与所有对比图表", flush=True)
+    print("Step 5: Saving 5-Fold ensemble model weights and all comparison charts", flush=True)
     print("=" * 75, flush=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = scratch_dir / f"results_exp3_{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # 保存 5-Fold 全量模型
+    # Save all 5-Fold models
     for k, m in enumerate(models):
         torch.save({
             'encoder_state_dict': m.encoder.state_dict(),
@@ -522,9 +522,9 @@ def main():
             'fold': k + 1
         }, str(run_dir / f"ensemble_fold_{k+1}_classifier.pt"))
 
-    print(f"  [OK] 5 个 Fold 的分类器模型全权重已保存至目录: {run_dir}", flush=True)
+    print(f"  [OK] All 5 Fold classifier model weights saved to: {run_dir}", flush=True)
 
-    # 导出测试集终极对比报告 CSV
+    # Export ultimate test comparison report CSV
     with open(run_dir / 'ultimate_test_comparison.csv', 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         writer.writerow(['Model_Configuration', 'Threshold', 'Test_Accuracy', 'Test_Precision', 'Test_Recall', 'Test_F1', 'Test_AUC', 'SMILES_Recognized'])
@@ -548,7 +548,7 @@ def main():
         ])
 
     plot_threshold_search_curve(th_records, best_th, run_dir)
-    print(f"\n  [OK] 终极实验 Exp 3 的全部结果已统一导出至:\n       --> {run_dir}", flush=True)
+    print(f"\n  [OK] All results from Ultimate Experiment Exp3 exported to:\n       --> {run_dir}", flush=True)
     print("=" * 75, flush=True)
 
 

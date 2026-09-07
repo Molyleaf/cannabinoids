@@ -1,15 +1,3 @@
-"""
-SimCLR 多卡 DDP 预训练入口 (2 卡 G100 torchrun 启动)
-
-支持功能：
-1. 适应 2 卡 G100 高性能 DDP 分布式训练 (默认 2048 Batch Size, 每卡 Local Batch Size 1024)
-2. 从 Parquet 数据源读取已标准化预处理的 561 维质谱特征向量 (373,330 条样本)
-3. GPU 显存全量数据预加载 (零 I/O 拷贝，零 PCIe 传输与 DataLoader 阻塞)
-4. GPU 向量化质谱增强流 (Sample-wise 强度抖动 + 静态位置张量缓存，保护拓扑结构与相对峰比例)
-5. 工业级 LARS 优化器 (对齐 SimCLR 规范排除 Bias 与 GroupNorm/LayerNorm Weight Decay)
-6. 推导的最优初始学习率 (base_lr=0.030, 8x 线性缩放后峰值 LR=0.240, 最大允许 500 Epochs / 91,000 Steps 余弦退火)
-7. DDP 全局 All-Gather 向量化 NT-Xent 对比损失计算与早停收敛检测
-"""
 
 import argparse
 from datetime import datetime
@@ -27,7 +15,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
-# 确保根路径可导入 common 与 embedding_pretrain 模块
+# Ensure root path is importable for common and embedding_pretrain modules
 project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
@@ -40,9 +28,9 @@ from embedding_pretrain.lib.utils import ConvergenceChecker, plot_loss_history
 
 
 def load_spectra_from_parquet(data_path: Path) -> np.ndarray:
-    """直接读取已预处理好的 Parquet 质谱特征向量文件"""
+    """Directly read preprocessed Parquet mass spectrum feature vector file"""
     if not data_path.exists():
-        raise FileNotFoundError(f"错误: 未找到预训练数据文件 {data_path}")
+        raise FileNotFoundError(f"Error: Pre-training data file not found at {data_path}")
     
     table = pq.read_table(str(data_path), columns=['spectrum_vector'])
     raw_list = table['spectrum_vector'].to_pylist()
@@ -51,7 +39,7 @@ def load_spectra_from_parquet(data_path: Path) -> np.ndarray:
 
 
 class LinearWarmupCosineAnnealingLR:
-    """线性 Warmup + 余弦退火学习率调度器"""
+    """Linear Warmup + Cosine Annealing learning rate scheduler"""
     def __init__(self, optimizer, warmup_epochs, max_epochs, base_lr, min_lr=1e-5):
         self.optimizer = optimizer
         self.warmup_epochs = warmup_epochs
@@ -78,7 +66,7 @@ class LinearWarmupCosineAnnealingLR:
 
 
 def setup_ddp():
-    """初始化 DDP 分布式环境"""
+    """Initialize DDP distributed environment"""
     is_distributed = ('RANK' in os.environ and 'WORLD_SIZE' in os.environ)
     if is_distributed:
         rank = int(os.environ['RANK'])
@@ -108,17 +96,17 @@ def main():
     base_dir = Path(__file__).resolve().parent
     default_data_path = base_dir / "data_source" / "preprocessed_spectra.parquet"
 
-    parser = argparse.ArgumentParser(description="SimCLR 2卡 G100 DDP 对比学习预训练")
-    parser.add_argument("--data_path", type=str, default=str(default_data_path), help="预训练 Parquet 数据路径")
-    parser.add_argument("--global_batch_size", type=int, default=2048, help="全局 Batch Size (默认 2048，适应 2 卡 G100 每卡 1024)")
-    parser.add_argument("--base_lr", type=float, default=0.030, help="基础学习率 (默认 0.030, 8x 线性缩放后 Peak LR=0.240)")
-    parser.add_argument("--warmup_epochs", type=int, default=10, help="Linear Warmup 轮数")
-    parser.add_argument("--max_epochs", type=int, default=500, help="最大允许训练轮数 (默认 500 Epochs)")
-    parser.add_argument("--temperature", type=float, default=0.07, help="NT-Xent 温度系数")
+    parser = argparse.ArgumentParser(description="SimCLR 2x G100 DDP Contrastive Learning Pre-training")
+    parser.add_argument("--data_path", type=str, default=str(default_data_path), help="Pre-training Parquet data path")
+    parser.add_argument("--global_batch_size", type=int, default=2048, help="Global Batch Size (default 2048, per GPU 1024 on 2x G100)")
+    parser.add_argument("--base_lr", type=float, default=0.030, help="Base learning rate (default 0.030, 8x linear scaling -> Peak LR=0.240)")
+    parser.add_argument("--warmup_epochs", type=int, default=10, help="Linear Warmup epochs")
+    parser.add_argument("--max_epochs", type=int, default=500, help="Maximum allowed training epochs (default 500)")
+    parser.add_argument("--temperature", type=float, default=0.07, help="NT-Xent temperature coefficient")
     parser.add_argument("--weight_decay", type=float, default=1e-6, help="LARS Weight Decay")
-    parser.add_argument("--patience", type=int, default=30, help="早停耐心值 (Patience)")
-    parser.add_argument("--max_samples", type=int, default=None, help="限制样本数量 (用于本地测试，默认全量)")
-    parser.add_argument("--output_dir", type=str, default=str(base_dir), help="模型输出保存目录")
+    parser.add_argument("--patience", type=int, default=30, help="Early stopping patience")
+    parser.add_argument("--max_samples", type=int, default=None, help="Limit sample count (for local testing, default uses all)")
+    parser.add_argument("--output_dir", type=str, default=str(base_dir), help="Model output save directory")
     args = parser.parse_args()
 
     rank, world_size, local_rank, device = setup_ddp()
@@ -135,31 +123,31 @@ def main():
     if is_main_process:
         output_dir.mkdir(parents=True, exist_ok=True)
         print("=" * 60)
-        print("SimCLR 2 卡 G100 DDP 对比学习预训练 (GPU 显存全预载 + 向量化掩码 Loss + LARS)")
+        print("SimCLR 2x G100 DDP Contrastive Learning Pre-training (GPU Full Preload + Vectorized Mask Loss + LARS)")
         print("=" * 60)
         print(f"Rank: {rank}/{world_size} | Device: {device}")
-        print(f"数据文件: {data_path}")
-        print(f"输出目录: {output_dir}")
-        print(f"全局 Batch Size: {args.global_batch_size}")
-        print(f"每卡 Local Batch Size: {args.global_batch_size // world_size}")
-        print(f"最大允许 Epochs: {args.max_epochs}")
+        print(f"Data file: {data_path}")
+        print(f"Output directory: {output_dir}")
+        print(f"Global Batch Size: {args.global_batch_size}")
+        print(f"Local Batch Size per GPU: {args.global_batch_size // world_size}")
+        print(f"Max Epochs: {args.max_epochs}")
 
-    # 从 Parquet 加载数据集
+    # Load dataset from Parquet
     spectra = load_spectra_from_parquet(data_path)
     if args.max_samples is not None:
         spectra = spectra[:args.max_samples]
 
     if is_main_process:
-        print(f"成功加载质谱数据: {spectra.shape[0]:,} 个样本, 维度: {spectra.shape[1]}")
+        print(f"Successfully loaded mass spectrum data: {spectra.shape[0]:,} samples, dimension: {spectra.shape[1]}")
 
     local_batch_size = max(1, args.global_batch_size // world_size)
 
-    # 极速优化：全量数据集直接预加载驻留 GPU 显存 (彻底消除 CPU-GPU PCIe 传输与 PyTorch DataLoader 开销)
+    # Ultra-fast optimization: preload full dataset into GPU memory (eliminates CPU-GPU PCIe transfer and PyTorch DataLoader overhead)
     if device.type == 'cuda':
         if is_main_process:
-            print("[Data Pipeline] 将数据集一次性预加载驻留 GPU 显存 (零 CPU 传输延迟)...")
+            print("[Data Pipeline] Preloading full dataset into GPU memory (zero CPU transfer latency)...")
         full_tensor = torch.from_numpy(spectra).to(device, non_blocking=True)
-        # 多卡 DDP 样本切分 (Strided shard)
+        # Multi-GPU DDP sample sharding (Strided shard)
         rank_spectra = full_tensor[rank::world_size]
         use_gpu_direct_loader = True
     else:
@@ -175,7 +163,7 @@ def main():
             drop_last=True
         )
 
-    # 初始化模型结构
+    # Initialize model architecture
     input_dim = spectra.shape[1]
     encoder = SpectrumEncoder(input_dim=input_dim, hidden_dim=256).to(device)
     projection_head = ProjectionHead(input_dim=256, hidden_dim=128, output_dim=64).to(device)
@@ -187,7 +175,7 @@ def main():
         else:
             model = DDP(model)
 
-    # 初始化 LARS 优化器 (自动实现线性学习率缩放)
+    # Initialize LARS optimizer (automatically applies linear learning rate scaling)
     optimizer = get_lars_optimizer(
         model=model,
         base_lr=args.base_lr,
@@ -204,20 +192,20 @@ def main():
         base_lr=scaled_lr
     )
 
-    # 统一 GPU 向量化数据增强流水线
+    # Unified GPU-vectorized data augmentation pipeline
     augmenter = SpectrumAugmentation(mode='pretrain')
     
-    # 拟合收敛检测器
+    # Convergence checker
     convergence_checker = ConvergenceChecker(
         patience=args.patience,
         min_delta=1e-4,
         window_size=10
     )
 
-    # 混合精度 Scaler
+    # Mixed precision scaler
     scaler = torch.amp.GradScaler('cuda') if device.type == 'cuda' else None
 
-    # 训练主循环
+    # Main training loop
     best_loss = float('inf')
     loss_history = []
     start_time = datetime.now()
@@ -229,7 +217,7 @@ def main():
         n_batches = 0
 
         if use_gpu_direct_loader:
-            # 在 GPU 显存内生成零延迟打乱索引
+            # Generate zero-latency shuffled indices within GPU memory
             perm = torch.randperm(len(rank_spectra), device=device)
             shuffled_spectra = rank_spectra[perm]
             num_batches = len(shuffled_spectra) // local_batch_size
@@ -239,7 +227,7 @@ def main():
             for b_idx in pbar:
                 spec_batch = shuffled_spectra[b_idx * local_batch_size : (b_idx + 1) * local_batch_size]
 
-                # 在 GPU 上高效执行 2D Batch 矩阵特征增强
+                # Efficient 2D Batch matrix feature augmentation on GPU
                 view1 = augmenter(spec_batch)
                 view2 = augmenter(spec_batch)
                 views = torch.cat([view1, view2], dim=0)
@@ -281,7 +269,7 @@ def main():
             for (batch_data,) in pbar:
                 spec_batch = batch_data.to(device, non_blocking=True)
 
-                # 在 GPU 上高效执行 2D Batch 矩阵特征增强
+                # Efficient 2D Batch matrix feature augmentation on GPU
                 view1 = augmenter(spec_batch)
                 view2 = augmenter(spec_batch)
                 views = torch.cat([view1, view2], dim=0)
@@ -304,7 +292,7 @@ def main():
 
         avg_loss = epoch_loss / max(1, n_batches)
 
-        # 多卡 Loss 聚合打日志
+        # Multi-GPU loss aggregation for logging
         if world_size > 1:
             loss_tensor = torch.tensor([avg_loss], device=device)
             dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
@@ -313,7 +301,7 @@ def main():
         if is_main_process:
             loss_history.append(avg_loss)
             elapsed = datetime.now() - start_time
-            print(f'Epoch {epoch:3d} | Loss: {avg_loss:.6f} | LR: {current_lr:.2e} | 耗时: {str(elapsed).split(".")[0]}')
+            print(f'Epoch {epoch:3d} | Loss: {avg_loss:.6f} | LR: {current_lr:.2e} | Elapsed: {str(elapsed).split(".")[0]}')
 
             if avg_loss < best_loss:
                 best_loss = avg_loss
@@ -323,12 +311,12 @@ def main():
                     'encoder_state_dict': raw_model.encoder.state_dict(),
                     'loss': avg_loss,
                 }, str(output_dir / 'best_model.pt'))
-                print(f'  [OK] 已更新保存最佳预训练模型 (Loss: {avg_loss:.6f})')
+                print(f'  [OK] Updated and saved best pre-training model (Loss: {avg_loss:.6f})')
 
-            # 早停拟合检测
+            # Early stopping convergence detection
             if convergence_checker.update(avg_loss):
                 print(f"\n{'='*60}")
-                print(f"模型在第 {epoch} 轮收敛，停止训练")
+                print(f"Model converged at epoch {epoch}, stopping training")
                 print(f"{'='*60}")
                 break
 
@@ -336,12 +324,12 @@ def main():
         raw_model = model.module if hasattr(model, 'module') else model
         final_encoder_path = output_dir / 'pretrained_encoder_final_v1.pt'
         torch.save(raw_model.encoder.state_dict(), str(final_encoder_path))
-        print(f"\n[OK] 最终编码器已保存至结果目录: {final_encoder_path}")
+        print(f"\n[OK] Final encoder saved to: {final_encoder_path}")
 
-        # 同步更新共享编码器权重供后训练 (finetune) 模块直接加载
+        # Sync shared encoder weights for post-training (finetune) modules to load directly
         shared_encoder_path = base_dir / 'pretrained_encoder_final_v1.pt'
         torch.save(raw_model.encoder.state_dict(), str(shared_encoder_path))
-        print(f"[OK] 已同步更新后训练共享编码器: {shared_encoder_path}")
+        print(f"[OK] Synced shared encoder for post-training: {shared_encoder_path}")
 
         plot_loss_history(loss_history, best_loss, output_dir / 'pretraining_loss.png')
 

@@ -6,9 +6,9 @@ import numpy as np
 
 def parse_msp_text(text: str, min_peaks: int = 1) -> list:
     """
-    使用鲁棒状态机解析 MSP/MGF 质谱文本数据。
-    严格防范 Comments 或 Metadata 行泄漏至质谱峰矩阵中。
-    返回包含 name, smiles, precursor_mz, peaks 的化合物列表。
+    Parse MSP/MGF mass spectrometry text data using a robust state machine.
+    Strictly prevents Comments or Metadata lines from leaking into the mass spectrum peak matrix.
+    Returns a list of compounds containing name, smiles, precursor_mz, and peaks.
     """
     lines = text.splitlines()
     compounds = []
@@ -69,7 +69,7 @@ def parse_msp_text(text: str, min_peaks: int = 1) -> list:
 
 
 def parse_msp_bytes(file_bytes: bytes, min_peaks: int = 1) -> list:
-    """从二进制字节流解析 MSP/MGF 质谱数据。"""
+    """Parse MSP/MGF mass spectrometry data from binary byte stream."""
     try:
         text = file_bytes.decode('utf-8', errors='ignore')
     except Exception:
@@ -79,24 +79,23 @@ def parse_msp_bytes(file_bytes: bytes, min_peaks: int = 1) -> list:
 
 def parse_msp(msp_file, min_peaks: int = 5) -> list:
     """
-    使用鲁棒状态机解析本地 MSP/MGF 质谱文件。
-    返回包含 name, smiles, precursor_mz, peaks 的化合物列表。
+    Parse local MSP/MGF mass spectrometry file using a robust state machine.
+    Returns a list of compounds containing name, smiles, precursor_mz, and peaks.
     """
     msp_path = Path(msp_file)
-    print(f"[DataProcessor] 正在解析 MSP 文件: {msp_path.name}...")
+    print(f"[DataProcessor] Parsing MSP file: {msp_path.name}...")
 
     with open(msp_path, 'r', encoding='utf-8', errors='ignore') as f:
         text = f.read()
 
     compounds = parse_msp_text(text, min_peaks=min_peaks)
-    print(f"[DataProcessor] 成功解析出 {len(compounds)} 个化合物谱图")
+    print(f"[DataProcessor] Successfully parsed {len(compounds)} compound spectra")
     return compounds
-
 
 
 def clean_spectrum(peaks):
     """
-    使用 ms_entropy.clean_spectrum 进行质谱离群峰滤噪与质谱清洗
+    Use ms_entropy.clean_spectrum for mass spectrum outlier peak denoising and spectrum cleaning
     """
     arr = np.array(peaks, dtype=np.float32)
     if len(arr) == 0:
@@ -106,7 +105,7 @@ def clean_spectrum(peaks):
 
 def peaks_to_vector(peaks, mz_min=40, mz_max=600):
     """
-    将 (mz, intensity) 峰列表按 1 Da 分辨率映射为固定维度的 1D 特征向量 (561 维)
+    Map (mz, intensity) peak list to a fixed-dimension 1D feature vector (561 dimensions) at 1 Da resolution
     """
     dim = mz_max - mz_min + 1
     vec = np.zeros(dim, dtype=np.float32)
@@ -120,7 +119,7 @@ def peaks_to_vector(peaks, mz_min=40, mz_max=600):
 
 def preprocess_spectra(spectra):
     """
-    对 1D 质谱向量矩阵进行总离子强度 (TIC) 归一化 + 平方根缩放转换
+    Apply total ion current (TIC) normalization + square root scaling transform to 1D mass spectrum vector matrix
     """
     if spectra.ndim == 1:
         spectra = spectra[np.newaxis, :]
@@ -132,7 +131,7 @@ def preprocess_spectra(spectra):
 
 def process_msp_file_to_vectors(msp_file, mz_min=40, mz_max=600):
     """
-    从 MSP 文件直接端到端提取已清洗并归一化的 561 维特征矩阵
+    End-to-end extraction of cleaned and normalized 561-dimensional feature matrix directly from MSP file
     """
     compounds = parse_msp(msp_file)
     vectors = []
@@ -151,9 +150,9 @@ def process_msp_file_to_vectors(msp_file, mz_min=40, mz_max=600):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Cannabinoids 数据清洗与向量提取工具")
-    parser.add_argument("input_msp", type=str, help="输入的 MSP 文件路径")
-    parser.add_argument("-o", "--output_npy", type=str, default=None, help="输出的 .npy 文件路径")
+    parser = argparse.ArgumentParser(description="Cannabinoids data cleaning and vector extraction tool")
+    parser.add_argument("input_msp", type=str, help="Input MSP file path")
+    parser.add_argument("-o", "--output_npy", type=str, default=None, help="Output .npy file path")
     args = parser.parse_args()
     
     output_path = args.output_npy
@@ -162,4 +161,4 @@ if __name__ == '__main__':
         
     vecs = process_msp_file_to_vectors(args.input_msp)
     np.save(output_path, vecs)
-    print(f"[OK] 已生成归一化向量数据: {output_path} (Shape: {vecs.shape})")
+    print(f"[OK] Normalized vector data generated: {output_path} (Shape: {vecs.shape})")

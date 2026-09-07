@@ -11,6 +11,7 @@ if str(project_root) not in sys.path:
 
 from embedding_pretrain.lib.models import SpectrumEncoder
 
+
 def evaluate():
     try:
         sys.stdout.reconfigure(encoding='utf-8')
@@ -20,7 +21,7 @@ def evaluate():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
 
-    # 1. 加载模型
+    # 1. Load model
     model_path = project_root / "embedding_pretrain" / "results_20260725_095428" / "best_model.pt"
     print(f"Loading checkpoint from: {model_path}")
     ckpt = torch.load(model_path, map_location='cpu')
@@ -35,7 +36,7 @@ def evaluate():
         encoder.load_state_dict(ckpt['encoder_state_dict'])
     elif 'model_state_dict' in ckpt:
         state_dict = ckpt['model_state_dict']
-        # check if key starts with encoder.
+        # Check if key starts with encoder.
         new_state_dict = {}
         for k, v in state_dict.items():
             if k.startswith('encoder.'):
@@ -51,7 +52,7 @@ def evaluate():
     encoder = encoder.to(device)
     encoder.eval()
 
-    # 2. 加载数据
+    # 2. Load data
     data_path = project_root / "embedding_pretrain" / "data_source" / "preprocessed_spectra.parquet"
     if data_path.exists():
         table = pq.read_table(str(data_path), columns=['spectrum_vector'])
@@ -67,7 +68,7 @@ def evaluate():
     sampled_spectra = spectra[indices]
     spectra_tensor = torch.tensor(sampled_spectra, dtype=torch.float32).to(device)
 
-    # 3. 提取特征
+    # 3. Extract features
     with torch.no_grad():
         batch_size = 1000
         h_list = []
@@ -77,7 +78,7 @@ def evaluate():
             h_list.append(h)
         h_all = torch.cat(h_list, dim=0)  # [M, 256]
 
-    # 4. 计算指标
+    # 4. Compute metrics
     M = num_eval_samples
     d = h_all.shape[1]
     S = torch.mm(h_all, h_all.t())
@@ -105,15 +106,16 @@ def evaluate():
     nn_sim = torch.max(S_temp, dim=1)[0].mean().item()
     collapse_risk = avg_sim + nn_sim
 
-    # 5. 格式化输出
-    print(f"\n✓ 最佳模型 (loss: {loss:.6f})")
-    print("  计算嵌入空间指标...")
+    # 5. Format output
+    print(f"\nBest model (loss: {loss:.6f})")
+    print("  Computing embedding space metrics...")
     print(f"    Avg Similarity: {avg_sim:.4f} ± {std_sim:.4f}")
-    print(f"    Uniformity: {uniformity:.4f} (越低越好)")
-    print(f"    Tolerance: {tolerance:.4f} (越高越好)")
+    print(f"    Uniformity: {uniformity:.4f} (lower is better)")
+    print(f"    Tolerance: {tolerance:.4f} (higher is better)")
     print(f"    Effective Ratio: {effective_ratio:.3f}")
     print(f"    NN Similarity: {nn_sim:.4f}")
     print(f"    Collapse Risk: {collapse_risk:.2f}")
+
 
 if __name__ == "__main__":
     evaluate()

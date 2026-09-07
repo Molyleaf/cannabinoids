@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score, roc_auc_score
 
-# 动态确保项目根目录在 python 模块搜索路径中
+# Dynamically ensure project root is in Python module search path
 scratch_dir = Path(__file__).resolve().parent
 finetune_dir = scratch_dir.parent
 project_root = finetune_dir.parent
@@ -49,18 +49,18 @@ def train_two_stage_binary_classifier(
     max_grad_norm=1.0,
 ):
     """
-    两阶段解冻编码器微调训练流程 (Two-Stage Unfreeze Encoder Fine-Tuning)
-    - 阶段 1 (Warmup): 冻结 Encoder，仅训练分类头 (Classifier Head)
-    - 阶段 2 (Joint Fine-Tuning): 解冻 Encoder，差分学习率端到端微调 Encoder + Classifier
+    Two-stage unfreeze encoder fine-tuning training pipeline
+    - Stage 1 (Warmup): Freeze Encoder, train only Classifier Head
+    - Stage 2 (Joint Fine-Tuning): Unfreeze Encoder, end-to-end fine-tuning with differential learning rates
     """
     dev = torch.device(device if torch.cuda.is_available() and 'cuda' in str(device) else 'cpu')
-    print(f"\n训练执行设备: {dev}", flush=True)
+    print(f"\nTraining device: {dev}", flush=True)
     model = model.to(dev)
 
     if pos_weight is not None and pos_weight != 1.0:
         pw_tensor = torch.tensor([pos_weight], device=dev, dtype=torch.float32)
         criterion = nn.BCEWithLogitsLoss(pos_weight=pw_tensor)
-        print(f"  [INFO] 启用正样本损失加权 pos_weight = {pos_weight:.4f}", flush=True)
+        print(f"  [INFO] Positive class weighting enabled: pos_weight = {pos_weight:.4f}", flush=True)
     else:
         criterion = nn.BCEWithLogitsLoss()
 
@@ -72,9 +72,9 @@ def train_two_stage_binary_classifier(
     train_accs, val_accs = [], []
     train_aucs, val_aucs = [], []
 
-    # ==================== 阶段 1: 冻结 Encoder, 预热分类头 ====================
+    # ==================== Stage 1: Freeze Encoder, Warmup Classifier ====================
     print("\n" + "=" * 60, flush=True)
-    print(f"【阶段 1】分类头预热训练 (Warmup {warmup_epochs} Epochs, 编码器已冻结)", flush=True)
+    print(f"[Stage 1] Classifier Warmup ({warmup_epochs} Epochs, Encoder Frozen)", flush=True)
     print("=" * 60, flush=True)
 
     model.freeze_encoder = True
@@ -118,7 +118,7 @@ def train_two_stage_binary_classifier(
         train_acc = train_correct / train_total
         train_auc = safe_auc(train_labels_all, train_probs_all)
 
-        # 验证
+        # Validation
         model.eval()
         val_loss, val_correct, val_total = 0.0, 0, 0
         val_probs_all, val_labels_all = [], []
@@ -159,11 +159,11 @@ def train_two_stage_binary_classifier(
             best_val_loss = avg_val_loss
             best_model_state = copy.deepcopy(model.state_dict())
 
-    print(f"  [OK] 阶段 1 完成，阶段 1 最佳 Val Loss: {best_val_loss:.4f}", flush=True)
+    print(f"  [OK] Stage 1 complete. Best Val Loss: {best_val_loss:.4f}", flush=True)
 
-    # ==================== 阶段 2: 解冻 Encoder, 联合差分微调 ====================
+    # ==================== Stage 2: Unfreeze Encoder, Joint Fine-Tuning ====================
     print("\n" + "=" * 60, flush=True)
-    print(f"【阶段 2】解冻编码器端到端微调 (Encoder LR: {encoder_lr:.1e}, Classifier LR: {classifier_lr:.1e})", flush=True)
+    print(f"[Stage 2] Unfreeze Encoder End-to-End Fine-Tuning (Encoder LR: {encoder_lr:.1e}, Classifier LR: {classifier_lr:.1e})", flush=True)
     print("=" * 60, flush=True)
 
     model.freeze_encoder = False
@@ -213,7 +213,7 @@ def train_two_stage_binary_classifier(
         train_acc = train_correct / train_total
         train_auc = safe_auc(train_labels_all, train_probs_all)
 
-        # 验证
+        # Validation
         model.eval()
         val_loss, val_correct, val_total = 0.0, 0, 0
         val_probs_all, val_labels_all = [], []
@@ -261,13 +261,13 @@ def train_two_stage_binary_classifier(
         else:
             patience_counter += 1
             if patience_counter >= patience:
-                print(f"\n触发早停机制 (Patience={patience})，早停于 Epoch {epoch}", flush=True)
+                print(f"\nEarly stopping triggered (Patience={patience}) at Epoch {epoch}", flush=True)
                 break
 
     if best_model_state is not None:
         model.load_state_dict(best_model_state)
 
-    print(f"  [OK] 恢复全局最佳权重模型 (最佳 Val Loss: {best_val_loss:.4f})", flush=True)
+    print(f"  [OK] Restored best global model weights (Best Val Loss: {best_val_loss:.4f})", flush=True)
 
     history = {
         'train_loss': train_losses,
@@ -281,9 +281,10 @@ def train_two_stage_binary_classifier(
     return model, history
 
 
-def find_optimal_threshold(val_res, metric='f1'):
+def find_optimal_threshold(val_res, metric='accuracy'):
     """
-    在验证集上自动搜索最优决策阈值 T_opt
+    Automatically search for optimal decision threshold T_opt on validation set
+    Maximizes the specified metric (default: accuracy)
     """
     probs = val_res['probs']
     labels = val_res['labels']
@@ -306,12 +307,13 @@ def find_optimal_threshold(val_res, metric='f1'):
         spec = tn / (tn + fp) if (tn + fp) > 0 else 0.0
         youden_j = rec + spec - 1.0
 
-        score = f1 if metric == 'f1' else youden_j
+        # Use accuracy as the optimization metric
+        score = acc
 
         records.append({
             'threshold': float(th),
-            'f1': float(f1),
             'accuracy': float(acc),
+            'f1': float(f1),
             'precision': float(prec),
             'recall': float(rec),
             'youden_j': float(youden_j)
@@ -325,20 +327,20 @@ def find_optimal_threshold(val_res, metric='f1'):
 
 
 def plot_threshold_search_curve(records, best_th, output_dir):
-    """绘制验证集阈值搜索曲线图"""
+    """Plot validation set threshold search curve"""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     ths = [r['threshold'] for r in records]
-    f1s = [r['f1'] for r in records]
     accs = [r['accuracy'] for r in records]
+    f1s = [r['f1'] for r in records]
     precs = [r['precision'] for r in records]
     recs = [r['recall'] for r in records]
     j_stats = [r['youden_j'] for r in records]
 
     fig, ax = plt.subplots(figsize=(8.5, 5.5))
-    ax.plot(ths, f1s, label='F1-Score', color='#1f77b4', lw=2.5)
-    ax.plot(ths, accs, label='Accuracy', color='#2ca02c', lw=2.0, linestyle='--')
+    ax.plot(ths, accs, label='Accuracy', color='#1f77b4', lw=2.5)
+    ax.plot(ths, f1s, label='F1-Score', color='#2ca02c', lw=2.0, linestyle='--')
     ax.plot(ths, precs, label='Precision', color='#ff7f0e', lw=1.8, linestyle=':')
     ax.plot(ths, recs, label='Recall', color='#d62728', lw=1.8, linestyle='-.')
     ax.plot(ths, j_stats, label="Youden's J Index", color='#9467bd', lw=1.5, linestyle='-')
@@ -348,7 +350,7 @@ def plot_threshold_search_curve(records, best_th, output_dir):
 
     ax.set_xlabel('Decision Threshold', fontsize=11)
     ax.set_ylabel('Metric Score', fontsize=11)
-    ax.set_title("Validation Set Decision Threshold Optimization (Experiment 2)", fontsize=13, fontweight='bold')
+    ax.set_title("Validation Set Decision Threshold Optimization (Maximizing Accuracy)", fontsize=13, fontweight='bold')
     ax.legend(loc='lower left', frameon=True)
     ax.grid(True, linestyle=':', alpha=0.6)
 
@@ -356,16 +358,16 @@ def plot_threshold_search_curve(records, best_th, output_dir):
     save_path = output_dir / 'threshold_optimization_curve.png'
     plt.savefig(str(save_path), dpi=300, bbox_inches='tight')
     plt.close('all')
-    print(f"  [OK] 阈值寻优曲线图已保存: {save_path}", flush=True)
+    print(f"  [OK] Threshold optimization curve saved: {save_path}", flush=True)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="试验1 (解冻微调) 与 试验2 (验证集决策阈值寻优)")
+    parser = argparse.ArgumentParser(description="Experiment 1 (Unfreeze Fine-Tuning) + Experiment 2 (Threshold Optimization)")
     parser.add_argument(
         "--encoder_path",
         type=str,
         default=str(project_root / "embedding_pretrain" / "results_20260725_095428" / "best_model.pt"),
-        help="基础预训练编码器权重 (best_model.pt)"
+        help="Base pre-trained encoder weights (best_model.pt)"
     )
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--warmup_epochs", type=int, default=15)
@@ -378,23 +380,23 @@ def main():
 
     encoder_path = Path(args.encoder_path)
     if not encoder_path.exists():
-        raise FileNotFoundError(f"未找到指定的预训练权重文件: {encoder_path}")
+        raise FileNotFoundError(f"Pre-trained weights file not found: {encoder_path}")
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     print("=" * 70, flush=True)
-    print("试验1 (两阶段解冻微调) & 试验2 (验证集决策阈值寻优)", flush=True)
+    print("Experiment 1 (Two-Stage Unfreeze Fine-Tuning) & Experiment 2 (Threshold Optimization)", flush=True)
     print("=" * 70, flush=True)
-    print(f"基础预训练模型: {encoder_path}", flush=True)
-    print(f"运行设备: {device.upper()}", flush=True)
+    print(f"Base pre-trained model: {encoder_path}", flush=True)
+    print(f"Device: {device.upper()}", flush=True)
     if device == 'cuda':
-        print(f"显卡型号: {torch.cuda.get_device_name(0)}", flush=True)
-    print(f"编码器微调学习率: {args.encoder_lr}", flush=True)
-    print(f"分类头微调学习率: {args.classifier_lr}", flush=True)
+        print(f"GPU: {torch.cuda.get_device_name(0)}", flush=True)
+    print(f"Encoder fine-tuning LR: {args.encoder_lr}", flush=True)
+    print(f"Classifier fine-tuning LR: {args.classifier_lr}", flush=True)
 
-    # 1. 数据准备
+    # 1. Data preparation
     print("\n" + "=" * 70, flush=True)
-    print("Step 1: 加载与划分数据集", flush=True)
+    print("Step 1: Loading and splitting dataset", flush=True)
     print("=" * 70, flush=True)
     train_loader, train_eval_loader, val_loader, test_loader, meta = prepare_finetune_dataset(
         batch_size=args.batch_size,
@@ -404,9 +406,9 @@ def main():
         use_cuda=(device == 'cuda')
     )
 
-    # 2. 构建模型并加载预训练权重 best_model.pt
+    # 2. Build model and load pre-trained weights
     print("\n" + "=" * 70, flush=True)
-    print("Step 2: 实例化模型并加载预训练 Encoder (best_model.pt)", flush=True)
+    print("Step 2: Instantiating model and loading pre-trained Encoder (best_model.pt)", flush=True)
     print("=" * 70, flush=True)
     encoder = load_pretrained_encoder(
         encoder_path=encoder_path,
@@ -414,12 +416,11 @@ def main():
         hidden_dim=256,
         device=device
     )
-    # 初始化 BinaryClassifier，初始挂载 Encoder
     model = BinaryClassifier(encoder, input_dim=256, freeze_encoder=True)
 
-    # 3. 试验1: 开始两阶段解冻微调
+    # 3. Experiment 1: Two-stage unfreeze fine-tuning
     print("\n" + "=" * 70, flush=True)
-    print("Step 3: 执行【试验1】两阶段解冻 Encoder 端到端微调", flush=True)
+    print("Step 3: Running [Experiment 1] Two-Stage Unfreeze End-to-End Fine-Tuning", flush=True)
     print("=" * 70, flush=True)
     start_time = datetime.now()
     model, history = train_two_stage_binary_classifier(
@@ -435,24 +436,23 @@ def main():
         pos_weight=args.pos_weight
     )
     elapsed = datetime.now() - start_time
-    print(f"\n  [OK] 解冻微调完成，总用时: {str(elapsed).split('.')[0]}", flush=True)
+    print(f"\n  [OK] Unfreeze fine-tuning complete. Total time: {str(elapsed).split('.')[0]}", flush=True)
 
-    # 4. 试验2: 验证集决策阈值自动寻优
+    # 4. Experiment 2: Threshold optimization on validation set
     print("\n" + "=" * 70, flush=True)
-    print("Step 4: 执行【试验2】验证集决策阈值自动寻优 (Threshold Search)", flush=True)
+    print("Step 4: Running [Experiment 2] Validation Set Threshold Optimization", flush=True)
     print("=" * 70, flush=True)
 
-    # 先以默认 0.5 评估验证集
     val_res_default = evaluate_and_record_predictions(model, val_loader, sample_names=meta['val_sample_names'], device=device, threshold=0.50)
-    best_th, best_f1, th_records = find_optimal_threshold(val_res_default, metric='f1')
+    best_th, best_acc, th_records = find_optimal_threshold(val_res_default, metric='accuracy')
 
-    print(f"  [Search Result] 验证集阈值扫描完成 (0.10 ~ 0.90):", flush=True)
-    print(f"     基准默认阈值: T = 0.50 | Val Acc: {val_res_default['accuracy']:.2%} | Val F1: {val_res_default['f1']:.4f} | Val AUC: {val_res_default['auc']:.4f}", flush=True)
-    print(f"     搜寻最优阈值: T_opt = {best_th:.2f} | Val F1: {best_f1:.4f}", flush=True)
+    print(f"  [Search Result] Validation set threshold scan complete (0.10 ~ 0.90):", flush=True)
+    print(f"     Default threshold: T = 0.50 | Val Acc: {val_res_default['accuracy']:.2%} | Val F1: {val_res_default['f1']:.4f} | Val AUC: {val_res_default['auc']:.4f}", flush=True)
+    print(f"     Optimal threshold: T_opt = {best_th:.2f} | Val Accuracy: {best_acc:.2%}", flush=True)
 
-    # 5. 测试集多阈值对比评估
+    # 5. Test set evaluation with both thresholds
     print("\n" + "=" * 70, flush=True)
-    print("Step 5: 测试集性能对比 (默认 T=0.50 vs 最优 T_opt)", flush=True)
+    print("Step 5: Test Set Performance Comparison (Default T=0.50 vs Optimal T_opt)", flush=True)
     print("=" * 70, flush=True)
 
     train_res_05 = evaluate_and_record_predictions(model, train_eval_loader, sample_names=meta['train_sample_names'], device=device, threshold=0.50)
@@ -461,10 +461,10 @@ def main():
 
     test_res_opt = evaluate_and_record_predictions(model, test_loader, sample_names=meta['test_sample_names'], device=device, threshold=best_th)
 
-    print("\n--- 默认阈值 (T=0.50) 测试集结果 ---", flush=True)
+    print("\n--- Default Threshold (T=0.50) Test Set Results ---", flush=True)
     print(f"  Test Accuracy: {test_res_05['accuracy']:.2%} | Precision: {test_res_05['precision']:.2%} | Recall: {test_res_05['recall']:.2%} | F1: {test_res_05['f1']:.4f} | AUC: {test_res_05['auc']:.4f}", flush=True)
 
-    print(f"\n--- 最优阈值 (T_opt={best_th:.2f}) 测试集结果 ---", flush=True)
+    print(f"\n--- Optimal Threshold (T_opt={best_th:.2f}) Test Set Results ---", flush=True)
     print(f"  Test Accuracy: {test_res_opt['accuracy']:.2%} | Precision: {test_res_opt['precision']:.2%} | Recall: {test_res_opt['recall']:.2%} | F1: {test_res_opt['f1']:.4f} | AUC: {test_res_opt['auc']:.4f}", flush=True)
 
     smiles_res_05 = evaluate_positive_per_smiles(
@@ -485,16 +485,15 @@ def main():
         threshold=best_th
     )
 
-    # 6. 保存与导出结果
+    # 6. Save and export results
     print("\n" + "=" * 70, flush=True)
-    print("Step 6: 保存模型与导出对比结果", flush=True)
+    print("Step 6: Saving model and exporting results", flush=True)
     print("=" * 70, flush=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = scratch_dir / f"results_exp1_exp2_{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    # 保存解冻训练后的模型全权重
     checkpoint_path = run_dir / f"unfrozen_binary_classifier_{timestamp}.pt"
     torch.save({
         'encoder_state_dict': model.encoder.state_dict(),
@@ -505,27 +504,24 @@ def main():
         'test_metrics_opt': test_res_opt,
         'base_encoder_path': str(encoder_path)
     }, str(checkpoint_path))
-    print(f"  [OK] 解冻模型权重已保存至: {checkpoint_path}", flush=True)
+    print(f"  [OK] Unfrozen model weights saved to: {checkpoint_path}", flush=True)
 
-    # 导出评估表格 CSV
     export_results_to_excel(
         history=history,
         model=model,
         train_results=train_res_05,
         val_results=val_res_05,
-        test_results=test_res_opt, # 使用最优阈值的测试集结果导出明细
+        test_results=test_res_opt,
         smiles_results=smiles_res_opt,
         meta=meta,
         output_dir=run_dir
     )
 
-    # 导出阈值寻优明细 CSV
     with open(run_dir / 'threshold_search_records.csv', 'w', newline='', encoding='utf-8-sig') as f:
-        writer = csv.DictWriter(f, fieldnames=['threshold', 'f1', 'accuracy', 'precision', 'recall', 'youden_j'])
+        writer = csv.DictWriter(f, fieldnames=['threshold', 'accuracy', 'f1', 'precision', 'recall', 'youden_j'])
         writer.writeheader()
         writer.writerows(th_records)
 
-    # 导出实验对比报告 CSV
     with open(run_dir / 'experiment_comparison.csv', 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         writer.writerow(['Experiment', 'Threshold', 'Test_Accuracy', 'Test_Precision', 'Test_Recall', 'Test_F1', 'Test_AUC', 'SMILES_Recognized'])
@@ -550,12 +546,11 @@ def main():
             f"{smiles_res_opt['n_correct']}/{smiles_res_opt['n_smiles']} ({smiles_res_opt['accuracy']:.2%})" if smiles_res_opt else "N/A"
         ])
 
-    # 绘图
     plot_comprehensive_results(history, train_res_05, val_res_05, test_res_opt, smiles_res_opt, run_dir)
     plot_confusion_matrices(train_res_05, val_res_05, test_res_opt, run_dir)
     plot_threshold_search_curve(th_records, best_th, run_dir)
 
-    print(f"\n  [OK] 试验 1 与 试验 2 的全部结果已统一导出至:\n       --> {run_dir}", flush=True)
+    print(f"\n  [OK] All results from Experiment 1 and Experiment 2 exported to:\n       --> {run_dir}", flush=True)
     print("=" * 70, flush=True)
 
 

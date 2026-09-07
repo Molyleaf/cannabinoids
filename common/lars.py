@@ -4,11 +4,12 @@ from torch.optim.optimizer import Optimizer
 
 class LARS(Optimizer):
     """
-    SimCLR 官方规范的高性能 LARS (Layer-wise Adaptive Rate Scaling) 优化器。
+    High-performance LARS (Layer-wise Adaptive Rate Scaling) optimizer compliant with SimCLR official specifications.
     
-    主要特性：
-    1. 层级局部学习率计算 (Layer-wise LR scaling using trust coefficient eta=0.001)
-    2. 针对偏置项 (Bias) 与归一化层 (LayerNorm / GroupNorm / BatchNorm) 自动排除 Weight Decay 与 LARS 缩放系数。
+    Key features:
+    1. Layer-wise local learning rate computation (using trust coefficient eta=0.001)
+    2. Automatically excludes Weight Decay and LARS scaling coefficients for bias terms and 
+       normalization layers (LayerNorm / GroupNorm / BatchNorm).
     """
     def __init__(self,
                  params,
@@ -56,28 +57,28 @@ class LARS(Optimizer):
 
                 param_grad = p.grad
                 
-                # 判断该参数是否属于 bias 或 1D 归一化参数 (ndim <= 1)
+                # Check whether this parameter is a bias or 1D normalization parameter (ndim <= 1)
                 is_bias_or_norm = (p.ndim <= 1) and exclude_bias_n_norm
 
                 if not is_bias_or_norm:
-                    # 计算权重 L2 范数与梯度 L2 范数
+                    # Compute weight L2 norm and gradient L2 norm
                     w_norm = torch.norm(p, p=2)
                     g_norm = torch.norm(param_grad, p=2)
 
                     if w_norm > 0 and g_norm > 0:
-                        # 计算局部学习率 Trust Ratio
+                        # Compute local learning rate Trust Ratio
                         trust_ratio = eta * w_norm / (g_norm + weight_decay * w_norm + eps)
                     else:
                         trust_ratio = 1.0
 
-                    # 仅对非 bias/norm 参数应用 weight decay
+                    # Apply weight decay only to non-bias/norm parameters
                     if weight_decay != 0:
                         param_grad = param_grad.add(p, alpha=weight_decay)
 
-                    # 应用局部学习率缩放
+                    # Apply local learning rate scaling
                     param_grad = param_grad.mul(trust_ratio)
 
-                # 动量更新
+                # Momentum update
                 if momentum != 0:
                     param_state = self.state[p]
                     if 'momentum_buffer' not in param_state:
@@ -88,7 +89,7 @@ class LARS(Optimizer):
                     
                     param_grad = buf
 
-                # 变量更新
+                # Parameter update
                 p.add_(param_grad, alpha=-lr)
 
         return loss
@@ -96,12 +97,13 @@ class LARS(Optimizer):
 
 def get_lars_optimizer(model, base_lr=0.3, global_batch_size=4096, weight_decay=1e-6, momentum=0.9, eta=0.001):
     """
-    快捷构建辅助函数：自动对齐 SimCLR 学习率线性缩放并初始化 LARS 优化器
+    Convenience helper function: automatically applies SimCLR learning rate linear scaling 
+    and initializes the LARS optimizer.
     Linear Scaling Rule: lr = base_lr * (global_batch_size / 256)
     """
     scaled_lr = base_lr * (global_batch_size / 256.0)
     
-    # 区分常规参数与 Bias/Norm 参数
+    # Separate regular parameters from Bias/Norm parameters
     regular_params = []
     bias_or_norm_params = []
     
@@ -133,5 +135,5 @@ def get_lars_optimizer(model, base_lr=0.3, global_batch_size=4096, weight_decay=
         weight_decay=weight_decay,
         eta=eta
     )
-    print(f"[LARS Optimizer] 全局 Batch Size: {global_batch_size} | 缩放后 Learning Rate: {scaled_lr:.4f}")
+    print(f"[LARS Optimizer] Global Batch Size: {global_batch_size} | Scaled Learning Rate: {scaled_lr:.4f}")
     return optimizer

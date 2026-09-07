@@ -1,9 +1,3 @@
-"""
-大麻素 vs 非大麻素 二分类模型 - Grad-CAM注意力分析
-加载模型: binary_classifier_20260716_155622.pt
-输出: Grad-CAM权重Excel + 重点关注离子列表
-"""
-
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +11,7 @@ import torch.nn.functional as F
 warnings.filterwarnings('ignore')
 
 
-# ==================== 模型定义 ====================
+# ==================== Model Definition ====================
 
 class SpectrumEncoder(nn.Module):
     def __init__(self, input_dim=561, hidden_dim=256):
@@ -76,7 +70,7 @@ class BinaryClassifier(nn.Module):
         return logit.squeeze(-1)
 
 
-# ==================== 数据处理 ====================
+# ==================== Data Processing ====================
 
 def parse_msp_with_smiles(msp_file, min_peaks=5):
     with open(msp_file, 'r', encoding='utf-8') as f:
@@ -132,12 +126,12 @@ def preprocess_spectra(spectra):
     return np.sqrt(spectra)
 
 
-# ==================== heatmap ====================
+# ==================== Grad-CAM ====================
 
 def compute_grad_cam(model, spectrum_tensor):
     """
-    计算单个谱图的Grad-CAM权重
-    返回: (cam_weights, gradients) 
+    Compute Grad-CAM weights for a single spectrum
+    Returns: (cam_weights, gradients)
     """
     model.eval()
     device = next(model.parameters()).device
@@ -145,32 +139,32 @@ def compute_grad_cam(model, spectrum_tensor):
     if spectrum_tensor.device != device:
         spectrum_tensor = spectrum_tensor.to(device)
     
-    # 确保是2D输入 [features]
+    # Ensure 2D input [features]
     if spectrum_tensor.dim() == 1:
         spectrum_tensor = spectrum_tensor.unsqueeze(0)
     
     spectrum_tensor.requires_grad_()
     
-    # 前向传播
+    # Forward pass
     logits = model(spectrum_tensor)
     
-    # 反向传播
+    # Backward pass
     model.zero_grad()
     logits[0].backward()
     
-    # 获取梯度
+    # Get gradients
     gradients = spectrum_tensor.grad
     if gradients is None:
         return np.zeros(spectrum_tensor.shape[1]), None
     
-    # 计算CAM权重: 对梯度求平均作为权重
+    # Compute CAM weights: average gradients as weights
     weights = gradients.mean(dim=0, keepdim=True)
     
-    # 加权求和得到CAM
+    # Weighted sum to obtain CAM
     cam = (weights * spectrum_tensor).sum(dim=0)
     cam = F.relu(cam)
     
-    # 归一化
+    # Normalize
     if cam.max() > 1e-8:
         cam = cam / cam.max()
     
@@ -178,22 +172,22 @@ def compute_grad_cam(model, spectrum_tensor):
 
 
 def get_top_ions(cam_weights, mz_min=40, mz_max=600, top_k=20, threshold=0.5):
-    """提取重点关注离子"""
+    """Extract key ions"""
     mz_axis = np.linspace(mz_min, mz_max, len(cam_weights))
     
-    # 找到权重高于阈值的离子
+    # Find ions with weights above threshold
     threshold_value = threshold * cam_weights.max()
     important_indices = np.where(cam_weights > threshold_value)[0]
     
     if len(important_indices) == 0:
-        # 如果没有高于阈值的，取top_k
+        # If none above threshold, take top_k
         important_indices = np.argsort(cam_weights)[-top_k:][::-1]
     
-    # 按权重排序
+    # Sort by weight
     sorted_idx = np.argsort(cam_weights[important_indices])[::-1]
     important_indices = important_indices[sorted_idx]
     
-    # 取前top_k个
+    # Take top_k
     top_indices = important_indices[:top_k]
     top_mz = mz_axis[top_indices]
     top_weights = cam_weights[top_indices]
@@ -201,12 +195,12 @@ def get_top_ions(cam_weights, mz_min=40, mz_max=600, top_k=20, threshold=0.5):
     return top_mz, top_weights
 
 
-# ==================== 主程序 ====================
+# ==================== Main Program ====================
 
 if __name__ == "__main__":
     base_dir = Path(r"D:\DL\cann\建模")
     
-    # 查找模型
+    # Find model
     model_files = list(base_dir.glob("binary_classifier_*.pt"))
     model_files.extend(list((base_dir / "binary_classification_enhanced").glob("binary_classifier_*.pt"))) if (base_dir / "binary_classification_enhanced").exists() else None
     
@@ -214,34 +208,34 @@ if __name__ == "__main__":
     
     if model_files:
         model_path = model_files[0]
-        print(f"使用模型: {model_path.name}")
+        print(f"Using model: {model_path.name}")
     else:
-        print("未找到模型文件，请确认路径")
+        print("Model file not found, please verify path")
         exit(1)
     
-    # 输出目录
+    # Output directory
     output_dir = base_dir / f"gradcam_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     output_dir.mkdir(exist_ok=True)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"设备: {device}\n输出: {output_dir}")
+    print(f"Device: {device}\nOutput: {output_dir}")
     
-    # ===== 1. 加载数据 =====
+    # ===== 1. Load Data =====
     print("\n" + "="*60)
-    print("加载数据")
+    print("Loading Data")
     print("="*60)
     
-    pos_compounds = parse_msp_with_smiles(str(base_dir / "阳性-含CanonicalSMILES-5类骨架.msp"))
-    neg_compounds = parse_msp_with_smiles(str(base_dir / "阴性.msp"))
+    pos_compounds = parse_msp_with_smiles(str(base_dir / "positive_cannabinoids.msp"))
+    neg_compounds = parse_msp_with_smiles(str(base_dir / "negative.msp"))
     
     X_pos = preprocess_spectra(np.array([peaks_to_vector(c['peaks']) for c in pos_compounds]))
     X_neg = preprocess_spectra(np.array([peaks_to_vector(c['peaks']) for c in neg_compounds]))
     pos_smiles = np.array([c['smiles'] if c['smiles'] else c['name'] for c in pos_compounds])
     
-    print(f"  阳性: {len(X_pos)} 谱图")
-    print(f"  阴性: {len(X_neg)} 谱图")
+    print(f"  Positive: {len(X_pos)} spectra")
+    print(f"  Negative: {len(X_neg)} spectra")
     
-    # ===== 2. 划分测试集 =====
+    # ===== 2. Split Test Set =====
     np.random.seed(42)
     pos_indices = np.arange(len(X_pos))
     neg_indices = np.arange(len(X_pos), len(X_pos) + len(X_neg))
@@ -264,11 +258,11 @@ if __name__ == "__main__":
     X = np.concatenate([X_pos, X_neg], axis=0)
     y = np.concatenate([np.ones(len(X_pos)), np.zeros(len(X_neg))])
     
-    print(f"  测试集: {len(test_idx)} 谱图 (阳性: {(y[test_idx]==1).sum()})")
+    print(f"  Test set: {len(test_idx)} spectra (Positive: {(y[test_idx]==1).sum()})")
     
-    # ===== 3. 加载模型 =====
+    # ===== 3. Load Model =====
     print("\n" + "="*60)
-    print("加载模型")
+    print("Loading Model")
     print("="*60)
     
     checkpoint = torch.load(str(model_path), map_location=device)
@@ -281,49 +275,49 @@ if __name__ == "__main__":
         model.classifier.load_state_dict(checkpoint['classifier_state_dict'], strict=False)
     
     model.eval()
-    print(f"  ✓ 模型加载完成")
+    print(f"  Model loaded successfully")
     
-    # ===== 4. Grad-CAM分析 =====
+    # ===== 4. Grad-CAM Analysis =====
     print("\n" + "="*60)
-    print("heatmap 注意力分析")
+    print("Grad-CAM Attention Analysis")
     print("="*60)
     
     mz_min, mz_max = 40, 600
     mz_axis = np.linspace(mz_min, mz_max, 561)
     
-    # 存储所有结果
-    all_cam_weights = []  # 存储所有样本的CAM权重
-    all_labels = []       # 存储对应的标签
+    # Store all results
+    all_cam_weights = []  # CAM weights for all samples
+    all_labels = []       # Corresponding labels
     
-    pos_cam_weights = []  # 阳性样本的CAM权重
-    neg_cam_weights = []  # 阴性样本的CAM权重
+    pos_cam_weights = []  # CAM weights for positive samples
+    neg_cam_weights = []  # CAM weights for negative samples
     
-    sample_top_ions = []  # 每个样本的top离子
+    sample_top_ions = []  # Top ions for each sample
     
-    print("\n  计算Grad-CAM权重...")
+    print("\n  Computing Grad-CAM weights...")
     
     for i, idx in enumerate(test_idx):
         spectrum = torch.tensor(X[idx], dtype=torch.float32)
         label = y[idx]
-        label_text = '大麻素' if label == 1 else '非大麻素'
+        label_text = 'Cannabinoid' if label == 1 else 'Non-Cannabinoid'
         
-        # 计算Grad-CAM
+        # Compute Grad-CAM
         cam_weights, gradients = compute_grad_cam(model, spectrum)
         
-        # 确保cam_weights是一维数组
+        # Ensure cam_weights is 1D
         if cam_weights.ndim > 1:
             cam_weights = cam_weights.squeeze()
         
         all_cam_weights.append(cam_weights)
         all_labels.append(label)
         
-        # 按类别存储
+        # Store by class
         if label == 1:
             pos_cam_weights.append(cam_weights)
         else:
             neg_cam_weights.append(cam_weights)
         
-        # 提取top离子
+        # Extract top ions
         top_mz, top_weights = get_top_ions(cam_weights, top_k=15)
         for j, (mz, w) in enumerate(zip(top_mz, top_weights)):
             sample_top_ions.append({
@@ -334,20 +328,20 @@ if __name__ == "__main__":
                 'CAM_Weight': round(w, 4)
             })
         
-        # 进度显示
+        # Progress display
         if (i + 1) % 50 == 0:
-            print(f"    已处理: {i+1}/{len(test_idx)} 个样本")
+            print(f"    Processed: {i+1}/{len(test_idx)} samples")
     
-    print(f"    完成! 共处理 {len(test_idx)} 个样本")
+    print(f"    Complete! Processed {len(test_idx)} samples")
     
-    # ===== 5. 汇总分析 =====
-    print("\n  汇总分析...")
+    # ===== 5. Summary Analysis =====
+    print("\n  Performing summary analysis...")
     
-    # 计算所有样本的平均权重
+    # Compute average weights for all samples
     all_avg = np.mean(all_cam_weights, axis=0)
     all_std = np.std(all_cam_weights, axis=0)
     
-    # 计算阳性样本的平均权重
+    # Compute average weights for positive samples
     if pos_cam_weights:
         pos_avg = np.mean(pos_cam_weights, axis=0)
         pos_std = np.std(pos_cam_weights, axis=0)
@@ -355,7 +349,7 @@ if __name__ == "__main__":
         pos_avg = np.zeros_like(all_avg)
         pos_std = np.zeros_like(all_avg)
     
-    # 计算阴性样本的平均权重
+    # Compute average weights for negative samples
     if neg_cam_weights:
         neg_avg = np.mean(neg_cam_weights, axis=0)
         neg_std = np.std(neg_cam_weights, axis=0)
@@ -363,7 +357,7 @@ if __name__ == "__main__":
         neg_avg = np.zeros_like(all_avg)
         neg_std = np.zeros_like(all_avg)
     
-    # 构建汇总DataFrame
+    # Build summary DataFrame
     summary_data = []
     for i, mz in enumerate(mz_axis):
         summary_data.append({
@@ -377,105 +371,105 @@ if __name__ == "__main__":
     
     summary_df = pd.DataFrame(summary_data)
     
-    # ===== 6. 找出关键离子 =====
-    print("\n  识别关键离子...")
+    # ===== 6. Identify Key Ions =====
+    print("\n  Identifying key ions...")
     
-    # 大麻素关注离子 (阳性权重最高的)
+    # Cannabinoid-focused ions (highest positive weights)
     top_pos = summary_df.nlargest(30, 'Mean_Weight_Pos')[['m/z', 'Mean_Weight_Pos', 'Mean_Weight_Neg', 'Weight_Diff_Pos_Neg']]
-    top_pos['Type'] = '大麻素关注'
+    top_pos['Type'] = 'Cannabinoid-Focused'
     
-    # 非大麻素关注离子 (阴性权重最高的)
+    # Non-cannabinoid-focused ions (highest negative weights)
     top_neg = summary_df.nlargest(30, 'Mean_Weight_Neg')[['m/z', 'Mean_Weight_Neg', 'Mean_Weight_Pos', 'Weight_Diff_Pos_Neg']]
-    top_neg['Type'] = '非大麻素关注'
+    top_neg['Type'] = 'Non-Cannabinoid-Focused'
     
-    # 大麻素特异性离子 (阳性 >> 阴性)
+    # Cannabinoid-specific ions (positive >> negative)
     top_diff_pos = summary_df.nlargest(20, 'Weight_Diff_Pos_Neg')[['m/z', 'Mean_Weight_Pos', 'Mean_Weight_Neg', 'Weight_Diff_Pos_Neg']]
-    top_diff_pos['Type'] = '大麻素特异性'
+    top_diff_pos['Type'] = 'Cannabinoid-Specific'
     
-    # 非大麻素特异性离子 (阴性 >> 阳性)
+    # Non-cannabinoid-specific ions (negative >> positive)
     top_diff_neg = summary_df.nsmallest(20, 'Weight_Diff_Pos_Neg')[['m/z', 'Mean_Weight_Pos', 'Mean_Weight_Neg', 'Weight_Diff_Pos_Neg']]
-    top_diff_neg['Type'] = '非大麻素特异性'
+    top_diff_neg['Type'] = 'Non-Cannabinoid-Specific'
     
-    # ===== 7. 导出Excel =====
-    print("\n  导出Excel...")
+    # ===== 7. Export to Excel =====
+    print("\n  Exporting to Excel...")
     
     with pd.ExcelWriter(output_dir / 'gradcam_analysis.xlsx', engine='openpyxl') as writer:
-        # Sheet 1: 所有m/z的汇总统计
-        summary_df.to_excel(writer, sheet_name='全部离子权重', index=False)
+        # Sheet 1: Summary statistics for all m/z
+        summary_df.to_excel(writer, sheet_name='All_Ion_Weights', index=False)
         
-        # Sheet 2: 大麻素关注离子
-        top_pos.to_excel(writer, sheet_name='大麻素关注离子', index=False)
+        # Sheet 2: Cannabinoid-focused ions
+        top_pos.to_excel(writer, sheet_name='Cannabinoid_Focused', index=False)
         
-        # Sheet 3: 非大麻素关注离子
-        top_neg.to_excel(writer, sheet_name='非大麻素关注离子', index=False)
+        # Sheet 3: Non-cannabinoid-focused ions
+        top_neg.to_excel(writer, sheet_name='NonCannabinoid_Focused', index=False)
         
-        # Sheet 4: 大麻素特异性离子
-        top_diff_pos.to_excel(writer, sheet_name='大麻素特异性离子', index=False)
+        # Sheet 4: Cannabinoid-specific ions
+        top_diff_pos.to_excel(writer, sheet_name='Cannabinoid_Specific', index=False)
         
-        # Sheet 5: 非大麻素特异性离子
-        top_diff_neg.to_excel(writer, sheet_name='非大麻素特异性离子', index=False)
+        # Sheet 5: Non-cannabinoid-specific ions
+        top_diff_neg.to_excel(writer, sheet_name='NonCannabinoid_Specific', index=False)
         
-        # Sheet 6: 各样本Top15离子
-        pd.DataFrame(sample_top_ions).to_excel(writer, sheet_name='各样本Top15离子', index=False)
+        # Sheet 6: Top 15 ions per sample
+        pd.DataFrame(sample_top_ions).to_excel(writer, sheet_name='PerSample_Top15_Ions', index=False)
     
-    print(f"  ✓ Excel已导出: {output_dir / 'gradcam_analysis.xlsx'}")
+    print(f"  Excel exported: {output_dir / 'gradcam_analysis.xlsx'}")
     
-    # ===== 8. 打印重点关注离子 =====
+    # ===== 8. Print Key Ions Summary =====
     print("\n" + "="*60)
-    print("重点关注离子汇总")
+    print("Key Ion Summary")
     print("="*60)
     
-    print("\n【大麻素特异性离子】（阳性权重显著高于阴性）")
+    print("\n[Cannabinoid-Specific Ions] (Positive weight significantly higher than Negative)")
     print("-" * 70)
     for _, row in top_diff_pos.iterrows():
-        print(f"  m/z = {row['m/z']:6.2f}:  阳性={row['Mean_Weight_Pos']:.5f}, 阴性={row['Mean_Weight_Neg']:.5f}, 差异={row['Weight_Diff_Pos_Neg']:.5f}")
+        print(f"  m/z = {row['m/z']:6.2f}:  Pos={row['Mean_Weight_Pos']:.5f}, Neg={row['Mean_Weight_Neg']:.5f}, Diff={row['Weight_Diff_Pos_Neg']:.5f}")
     
-    print("\n【非大麻素特异性离子】（阴性权重显著高于阳性）")
+    print("\n[Non-Cannabinoid-Specific Ions] (Negative weight significantly higher than Positive)")
     print("-" * 70)
     for _, row in top_diff_neg.iterrows():
-        print(f"  m/z = {row['m/z']:6.2f}:  阴性={row['Mean_Weight_Neg']:.5f}, 阳性={row['Mean_Weight_Pos']:.5f}, 差异={abs(row['Weight_Diff_Pos_Neg']):.5f}")
+        print(f"  m/z = {row['m/z']:6.2f}:  Neg={row['Mean_Weight_Neg']:.5f}, Pos={row['Mean_Weight_Pos']:.5f}, Diff={abs(row['Weight_Diff_Pos_Neg']):.5f}")
     
-    print("\n【大麻素样本最关注的Top15离子】")
+    print("\n[Top 15 Ions Most Focused by Cannabinoid Samples]")
     print("-" * 70)
     for _, row in top_pos.head(15).iterrows():
-        print(f"  m/z = {row['m/z']:6.2f}:  权重={row['Mean_Weight_Pos']:.5f}")
+        print(f"  m/z = {row['m/z']:6.2f}:  Weight={row['Mean_Weight_Pos']:.5f}")
     
-    print("\n【非大麻素样本最关注的Top15离子】")
+    print("\n[Top 15 Ions Most Focused by Non-Cannabinoid Samples]")
     print("-" * 70)
     for _, row in top_neg.head(15).iterrows():
-        print(f"  m/z = {row['m/z']:6.2f}:  权重={row['Mean_Weight_Neg']:.5f}")
+        print(f"  m/z = {row['m/z']:6.2f}:  Weight={row['Mean_Weight_Neg']:.5f}")
     
-    # ===== 9. 按m/z范围统计 =====
+    # ===== 9. Statistics by m/z Range =====
     print("\n" + "="*60)
-    print("按m/z范围统计")
+    print("Statistics by m/z Range")
     print("="*60)
     
     ranges = [(40, 100), (100, 200), (200, 300), (300, 400), (400, 500), (500, 600)]
     range_labels = ['40-100', '100-200', '200-300', '300-400', '400-500', '500-600']
     
-    print("\n  大麻素关注离子分布:")
+    print("\n  Cannabinoid-focused ion distribution:")
     for (low, high), label in zip(ranges, range_labels):
         count = len(top_pos[(top_pos['m/z'] >= low) & (top_pos['m/z'] < high)])
-        print(f"    {label}: {count} 个")
+        print(f"    {label}: {count}")
     
-    print("\n  非大麻素关注离子分布:")
+    print("\n  Non-cannabinoid-focused ion distribution:")
     for (low, high), label in zip(ranges, range_labels):
         count = len(top_neg[(top_neg['m/z'] >= low) & (top_neg['m/z'] < high)])
-        print(f"    {label}: {count} 个")
+        print(f"    {label}: {count}")
     
-    print("\n  大麻素特异性离子分布:")
+    print("\n  Cannabinoid-specific ion distribution:")
     for (low, high), label in zip(ranges, range_labels):
         count = len(top_diff_pos[(top_diff_pos['m/z'] >= low) & (top_diff_pos['m/z'] < high)])
-        print(f"    {label}: {count} 个")
+        print(f"    {label}: {count}")
     
     print(f"\n{'='*60}")
-    print("完成！")
+    print("Complete!")
     print(f"{'='*60}")
-    print(f"  输出文件: {output_dir / 'gradcam_analysis.xlsx'}")
-    print(f"  包含以下Sheet:")
-    print(f"    1. 全部离子权重 - 所有m/z的平均CAM权重")
-    print(f"    2. 大麻素关注离子 - 大麻素样本最关注的离子")
-    print(f"    3. 非大麻素关注离子 - 非大麻素样本最关注的离子")
-    print(f"    4. 大麻素特异性离子 - 大麻素特有的离子")
-    print(f"    5. 非大麻素特异性离子 - 非大麻素特有的离子")
-    print(f"    6. 各样本Top15离子 - 每个样本的Top15关注离子")
+    print(f"  Output file: {output_dir / 'gradcam_analysis.xlsx'}")
+    print(f"  Contains the following sheets:")
+    print(f"    1. All_Ion_Weights - Mean CAM weights for all m/z")
+    print(f"    2. Cannabinoid_Focused - Ions most focused by cannabinoid samples")
+    print(f"    3. NonCannabinoid_Focused - Ions most focused by non-cannabinoid samples")
+    print(f"    4. Cannabinoid_Specific - Ions unique to cannabinoids")
+    print(f"    5. NonCannabinoid_Specific - Ions unique to non-cannabinoids")
+    print(f"    6. PerSample_Top15_Ions - Top 15 ions per sample")

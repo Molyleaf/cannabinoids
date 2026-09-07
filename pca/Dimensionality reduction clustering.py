@@ -1,8 +1,3 @@
-"""
-大麻素 vs 非大麻素 二分类模型可视化
-加载已训练好的模型: binary_classifier_20260716_155622.pt
-"""
-
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -26,7 +21,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 warnings.filterwarnings('ignore')
 
-# ==================== 模型定义 ====================
+# ==================== Model Definition ====================
 
 class SpectrumEncoder(nn.Module):
     def __init__(self, input_dim=561, hidden_dim=256):
@@ -85,7 +80,7 @@ class BinaryClassifier(nn.Module):
         return logit.squeeze(-1)
 
 
-# ==================== 数据处理 ====================
+# ==================== Data Processing ====================
 
 def parse_msp_with_smiles(msp_file, min_peaks=5):
     with open(msp_file, 'r', encoding='utf-8') as f:
@@ -141,7 +136,7 @@ def preprocess_spectra(spectra):
     return np.sqrt(spectra)
 
 
-# ==================== 评估与可视化 ====================
+# ==================== Evaluation & Visualization ====================
 
 def evaluate_model(model, test_loader, device, temperature=1.0):
     model.eval()
@@ -166,19 +161,19 @@ def evaluate_model(model, test_loader, device, temperature=1.0):
     auc = roc_auc_score(all_labels, all_probs)
     
     print(f"\n{'='*60}")
-    print("测试集评估结果")
+    print("Test Set Evaluation Results")
     print(f"{'='*60}")
-    print(f"  准确率: {acc:.2%} | 精确率: {prec:.2%} | 召回率: {rec:.2%} | F1: {f1:.4f} | AUC: {auc:.4f}")
+    print(f"  Accuracy: {acc:.2%} | Precision: {prec:.2%} | Recall: {rec:.2%} | F1: {f1:.4f} | AUC: {auc:.4f}")
     
     cm = confusion_matrix(all_labels, all_preds)
-    print(f"\n  混淆矩阵:\n    TN: {cm[0,0]:5d}  FP: {cm[0,1]:5d}\n    FN: {cm[1,0]:5d}  TP: {cm[1,1]:5d}")
+    print(f"\n  Confusion Matrix:\n    TN: {cm[0,0]:5d}  FP: {cm[0,1]:5d}\n    FN: {cm[1,0]:5d}  TP: {cm[1,1]:5d}")
     
     return {'accuracy': acc, 'precision': prec, 'recall': rec, 'f1': f1, 'auc': auc, 
             'confusion_matrix': cm, 'probs': all_probs, 'labels': all_labels, 'preds': all_preds}
 
 
 def analyze_embeddings(model, loader, device, output_dir):
-    """特征空间分析：t-SNE + pca"""
+    """Feature space analysis: t-SNE + PCA"""
     model.eval()
     embeddings, labels = [], []
     
@@ -192,13 +187,13 @@ def analyze_embeddings(model, loader, device, output_dir):
     embeddings = np.concatenate(embeddings, axis=0)
     labels = np.concatenate(labels, axis=0)
     
-    print(f"\n  嵌入矩阵: {embeddings.shape}, 阳性: {np.sum(labels==1)}, 阴性: {np.sum(labels==0)}")
+    print(f"\n  Embedding matrix: {embeddings.shape}, Positive: {np.sum(labels==1)}, Negative: {np.sum(labels==0)}")
     
-    # 高维评估
+    # High-dimensional evaluation
     sil_score = silhouette_score(embeddings, labels)
     print(f"  Silhouette Score: {sil_score:.4f}")
     
-    # 降维
+    # Dimensionality reduction
     n_samples = min(1500, len(embeddings))
     np.random.seed(42)
     idx = np.random.choice(len(embeddings), n_samples, replace=False)
@@ -207,7 +202,7 @@ def analyze_embeddings(model, loader, device, output_dir):
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     
     # t-SNE
-    print("  计算 t-SNE...")
+    print("  Computing t-SNE...")
     tsne = TSNE(n_components=2, random_state=42, perplexity=min(30, n_samples-1))
     emb_tsne = tsne.fit_transform(emb_sample)
     tsne_acc = cross_val_score(KNeighborsClassifier(n_neighbors=5), emb_tsne, labels_sample, cv=5).mean()
@@ -218,8 +213,8 @@ def analyze_embeddings(model, loader, device, output_dir):
     plt.colorbar(scatter, ax=ax)
     ax.grid(True, alpha=0.3)
     
-    # pca
-    print("  计算 pca...")
+    # PCA
+    print("  Computing PCA...")
     pca = PCA(n_components=2, random_state=42)
     emb_pca = pca.fit_transform(emb_sample)
     pca_acc = cross_val_score(KNeighborsClassifier(n_neighbors=5), emb_pca, labels_sample, cv=5).mean()
@@ -228,7 +223,7 @@ def analyze_embeddings(model, loader, device, output_dir):
     scatter = ax.scatter(emb_pca[:, 0], emb_pca[:, 1], c=labels_sample, cmap='coolwarm', alpha=0.6, s=10)
     ax.set_xlabel(f'PC1 ({pca.explained_variance_ratio_[0]*100:.1f}%)')
     ax.set_ylabel(f'PC2 ({pca.explained_variance_ratio_[1]*100:.1f}%)')
-    ax.set_title(f'pca (KNN Acc={pca_acc:.3f}, Sil={silhouette_score(emb_pca, labels_sample):.3f})')
+    ax.set_title(f'PCA (KNN Acc={pca_acc:.3f}, Sil={silhouette_score(emb_pca, labels_sample):.3f})')
     plt.colorbar(scatter, ax=ax)
     ax.grid(True, alpha=0.3)
     
@@ -240,7 +235,7 @@ def analyze_embeddings(model, loader, device, output_dir):
 
 
 def grad_cam_visualization(model, spectrum, output_dir):
-    """Grad-CAM可视化"""
+    """Grad-CAM visualization"""
     model.eval()
     device = next(model.parameters()).device
     
@@ -277,7 +272,7 @@ def grad_cam_visualization(model, spectrum, output_dir):
     axes[1].plot(mz_axis, spectrum_np, 'b-', alpha=0.3, linewidth=0.8)
     axes[1].fill_between(mz_axis, 0, spectrum_np * cam, color='red', alpha=0.5, label='Important Regions')
     axes[1].set_xlabel('m/z'); axes[1].set_ylabel('Intensity')
-    axes[1].set_title('heatmap - Red regions show important m/z')
+    axes[1].set_title('Grad-CAM - Red regions show important m/z')
     axes[1].legend(); axes[1].grid(True, alpha=0.3)
     
     plt.tight_layout()
@@ -286,7 +281,7 @@ def grad_cam_visualization(model, spectrum, output_dir):
 
 
 def plot_summary(eval_results, output_dir):
-    """结果汇总图"""
+    """Summary results plot"""
     fig, axes = plt.subplots(2, 2, figsize=(14, 12))
     
     # ROC
@@ -296,23 +291,23 @@ def plot_summary(eval_results, output_dir):
     axes[0, 0].set_xlabel('FPR'); axes[0, 0].set_ylabel('TPR')
     axes[0, 0].set_title('ROC Curve'); axes[0, 0].legend(); axes[0, 0].grid(True, alpha=0.3)
     
-    # 混淆矩阵
+    # Confusion matrix
     cm = eval_results['confusion_matrix']
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=['非大麻素', '大麻素'],
-                yticklabels=['非大麻素', '大麻素'], ax=axes[0, 1])
+                xticklabels=['Non-Cannabinoid', 'Cannabinoid'],
+                yticklabels=['Non-Cannabinoid', 'Cannabinoid'], ax=axes[0, 1])
     axes[0, 1].set_title(f'Confusion Matrix (Acc={eval_results["accuracy"]:.2%})')
     
-    # 概率分布
+    # Probability distribution
     pos_probs = eval_results['probs'][eval_results['labels'] == 1]
     neg_probs = eval_results['probs'][eval_results['labels'] == 0]
-    axes[1, 0].hist(neg_probs, bins=30, alpha=0.6, label='阴性', color='blue', edgecolor='black')
-    axes[1, 0].hist(pos_probs, bins=30, alpha=0.6, label='阳性', color='red', edgecolor='black')
+    axes[1, 0].hist(neg_probs, bins=30, alpha=0.6, label='Negative', color='blue', edgecolor='black')
+    axes[1, 0].hist(pos_probs, bins=30, alpha=0.6, label='Positive', color='red', edgecolor='black')
     axes[1, 0].axvline(x=0.5, color='black', linestyle='--', linewidth=2)
     axes[1, 0].set_xlabel('Probability'); axes[1, 0].set_ylabel('Count')
     axes[1, 0].set_title('Probability Distribution'); axes[1, 0].legend()
     
-    # 性能指标
+    # Performance metrics
     metrics = {'Acc': eval_results['accuracy'], 'Prec': eval_results['precision'],
                'Rec': eval_results['recall'], 'F1': eval_results['f1'], 'AUC': eval_results['auc']}
     colors = ['#2ecc71' if v > 0.9 else '#f39c12' if v > 0.8 else '#e74c3c' for v in metrics.values()]
@@ -328,12 +323,12 @@ def plot_summary(eval_results, output_dir):
     plt.show()
 
 
-# ==================== 主程序 ====================
+# ==================== Main Program ====================
 
 if __name__ == "__main__":
     base_dir = Path(r"D:\DL\cann\建模")
     
-    # 查找所有可能的模型位置
+    # Find all possible model locations
     possible_paths = [
         base_dir / "binary_classifier_20260716_155622.pt",
         base_dir / "binary_classifier_enhanced.pt",
@@ -341,61 +336,61 @@ if __name__ == "__main__":
         base_dir / "visualization" / "binary_classifier_*.pt",
     ]
     
-    # 查找所有binary_classifier开头的pt文件
+    # Find all pt files starting with binary_classifier
     all_models = list(base_dir.glob("binary_classifier_*.pt"))
     all_models.extend(list((base_dir / "binary_classification_enhanced").glob("binary_classifier_*.pt"))) if (base_dir / "binary_classification_enhanced").exists() else None
     all_models.extend(list((base_dir / "visualization").glob("binary_classifier_*.pt"))) if (base_dir / "visualization").exists() else None
     
-    # 去重并按修改时间排序
+    # Remove duplicates and sort by modification time
     all_models = sorted(set(all_models), key=lambda x: x.stat().st_mtime, reverse=True)
     
     if all_models:
         model_path = all_models[0]
-        print(f"找到模型: {model_path.name} (修改时间: {datetime.fromtimestamp(model_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')})")
+        print(f"Found model: {model_path.name} (Modified: {datetime.fromtimestamp(model_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')})")
     else:
-        # 尝试直接查找指定文件
+        # Try direct specified file
         specified_path = base_dir / "binary_classifier_20260716_155622.pt"
         if specified_path.exists():
             model_path = specified_path
-            print(f"使用指定模型: {model_path.name}")
+            print(f"Using specified model: {model_path.name}")
         else:
-            print(f"错误: 未找到二分类模型文件")
-            print(f"搜索路径: {base_dir}")
-            print(f"请确保模型文件存在，或修改代码中的路径")
+            print(f"Error: Binary classification model file not found")
+            print(f"Search path: {base_dir}")
+            print(f"Please ensure the model file exists, or modify the path in the code")
             exit(1)
     
-    # 创建输出目录（带时间戳）
+    # Create output directory (with timestamp)
     output_dir = base_dir / f"visualization_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     output_dir.mkdir(exist_ok=True)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"设备: {device}\n输出: {output_dir}")
+    print(f"Device: {device}\nOutput: {output_dir}")
     
-    # ===== 1. 加载数据 =====
+    # ===== 1. Load Data =====
     print("\n" + "="*60)
-    print("加载数据")
+    print("Loading Data")
     print("="*60)
     
-    pos_compounds = parse_msp_with_smiles(str(base_dir / "阳性-含CanonicalSMILES-5类骨架.msp"))
-    neg_compounds = parse_msp_with_smiles(str(base_dir / "阴性.msp"))
+    pos_compounds = parse_msp_with_smiles(str(base_dir / "positive_cannabinoids.msp"))
+    neg_compounds = parse_msp_with_smiles(str(base_dir / "negative.msp"))
     
     X_pos = preprocess_spectra(np.array([peaks_to_vector(c['peaks']) for c in pos_compounds]))
     X_neg = preprocess_spectra(np.array([peaks_to_vector(c['peaks']) for c in neg_compounds]))
     pos_smiles = np.array([c['smiles'] if c['smiles'] else c['name'] for c in pos_compounds])
     
-    print(f"  阳性: {len(X_pos)} 谱图, {len(np.unique(pos_smiles))} 种化合物")
-    print(f"  阴性: {len(X_neg)} 谱图")
+    print(f"  Positive: {len(X_pos)} spectra, {len(np.unique(pos_smiles))} compounds")
+    print(f"  Negative: {len(X_neg)} spectra")
     
-    # ===== 2. 划分测试集（与训练时一致） =====
+    # ===== 2. Split Test Set (consistent with training) =====
     print("\n" + "="*60)
-    print("划分测试集")
+    print("Splitting Test Set")
     print("="*60)
     
     np.random.seed(42)
     pos_indices = np.arange(len(X_pos))
     neg_indices = np.arange(len(X_pos), len(X_pos) + len(X_neg))
     
-    # 按SMILES划分阳性
+    # Split positive by SMILES
     pos_unique_smiles = np.unique(pos_smiles)
     shuffled_smiles = pos_unique_smiles.copy()
     np.random.shuffle(shuffled_smiles)
@@ -403,7 +398,7 @@ if __name__ == "__main__":
     pos_test_smiles = set(shuffled_smiles[:n_pos_test])
     pos_test_idx = [i for i in pos_indices if pos_smiles[i] in pos_test_smiles]
     
-    # 随机划分阴性
+    # Random split for negative
     neg_shuffled = neg_indices.copy()
     np.random.shuffle(neg_shuffled)
     n_neg_test = int(len(neg_indices) * 0.15)
@@ -415,113 +410,113 @@ if __name__ == "__main__":
     X = np.concatenate([X_pos, X_neg], axis=0)
     y = np.concatenate([np.ones(len(X_pos)), np.zeros(len(X_neg))])
     
-    print(f"  测试集: {len(test_idx)} 谱图 (阳性: {(y[test_idx]==1).sum()})")
+    print(f"  Test set: {len(test_idx)} spectra (Positive: {(y[test_idx]==1).sum()})")
     
-    # ===== 3. 创建DataLoader =====
+    # ===== 3. Create DataLoader =====
     test_loader = DataLoader(
         TensorDataset(torch.tensor(X[test_idx], dtype=torch.float32),
                       torch.tensor(y[test_idx], dtype=torch.float32)),
         batch_size=128, shuffle=False
     )
     
-    # ===== 4. 加载模型 =====
+    # ===== 4. Load Model =====
     print("\n" + "="*60)
-    print("加载模型")
+    print("Loading Model")
     print("="*60)
     
     checkpoint = torch.load(str(model_path), map_location=device)
     encoder = SpectrumEncoder(input_dim=561, hidden_dim=256).to(device)
     model = BinaryClassifier(encoder, input_dim=256).to(device)
     
-    # 加载权重
+    # Load weights
     if 'encoder_state_dict' in checkpoint:
         model.encoder.load_state_dict(checkpoint['encoder_state_dict'], strict=False)
-        print(f"  ✓ 加载编码器权重")
+        print(f"  Loaded encoder weights")
     else:
-        print(f"  ⚠ 未找到编码器权重，使用随机初始化")
+        print(f"  Warning: Encoder weights not found, using random initialization")
     
     if 'classifier_state_dict' in checkpoint:
         model.classifier.load_state_dict(checkpoint['classifier_state_dict'], strict=False)
-        print(f"  ✓ 加载分类器权重")
+        print(f"  Loaded classifier weights")
     else:
-        print(f"  ⚠ 未找到分类器权重，使用随机初始化")
+        print(f"  Warning: Classifier weights not found, using random initialization")
     
     temperature = checkpoint.get('temperature', 1.0)
     model.eval()
-    print(f"  温度参数: {temperature:.4f}")
+    print(f"  Temperature parameter: {temperature:.4f}")
     
-    # ===== 5. 评估 =====
+    # ===== 5. Evaluation =====
     print("\n" + "="*60)
-    print("评估模型")
+    print("Evaluating Model")
     print("="*60)
     
     eval_results = evaluate_model(model, test_loader, device, temperature)
     
-    # ===== 6. 特征空间分析 =====
+    # ===== 6. Feature Space Analysis =====
     print("\n" + "="*60)
-    print("特征空间分析")
+    print("Feature Space Analysis")
     print("="*60)
     
     analyze_embeddings(model, test_loader, device, output_dir)
     
-    # ===== 7. heatmap =====
+    # ===== 7. Grad-CAM Visualization =====
     print("\n" + "="*60)
-    print("heatmap 可视化")
+    print("Grad-CAM Visualization")
     print("="*60)
     
-    # 选择阳性样本
+    # Select positive sample
     pos_test = [i for i in test_idx if y[i] == 1]
     if pos_test:
         sample_idx = pos_test[0]
-        sample_label = '大麻素'
+        sample_label = 'Cannabinoid'
     else:
         sample_idx = test_idx[0]
-        sample_label = '非大麻素'
+        sample_label = 'Non-Cannabinoid'
     
     sample_spectrum = torch.tensor(X[sample_idx], dtype=torch.float32)
-    print(f"  样本标签: {sample_label}")
+    print(f"  Sample label: {sample_label}")
     grad_cam_visualization(model, sample_spectrum, output_dir)
     
-    # ===== 8. 结果汇总 =====
+    # ===== 8. Results Summary =====
     print("\n" + "="*60)
-    print("生成结果汇总")
+    print("Generating Results Summary")
     print("="*60)
     
     plot_summary(eval_results, output_dir)
     
-    # ===== 9. 导出数据 =====
+    # ===== 9. Export Data =====
     print("\n" + "="*60)
-    print("导出数据")
+    print("Exporting Data")
     print("="*60)
     
-    # 导出评估结果
+    # Export evaluation results
     pd.DataFrame({
         'Metric': ['Accuracy', 'Precision', 'Recall', 'F1', 'AUC'],
         'Value': [eval_results['accuracy'], eval_results['precision'], 
                   eval_results['recall'], eval_results['f1'], eval_results['auc']]
     }).to_excel(output_dir / 'metrics.xlsx', index=False)
     
-    # 导出预测结果
+    # Export predictions
     pd.DataFrame({
         'True_Label': eval_results['labels'],
         'Pred_Prob': eval_results['probs'],
         'Pred_Label': eval_results['preds']
     }).to_excel(output_dir / 'predictions.xlsx', index=False)
     
-    # 导出混淆矩阵
+    # Export confusion matrix
     cm_df = pd.DataFrame(eval_results['confusion_matrix'], 
-                         index=['真实:非大麻素', '真实:大麻素'],
-                         columns=['预测:非大麻素', '预测:大麻素'])
+                         index=['True:Non-Cannabinoid', 'True:Cannabinoid'],
+                         columns=['Pred:Non-Cannabinoid', 'Pred:Cannabinoid'])
     cm_df.to_excel(output_dir / 'confusion_matrix.xlsx')
     
     print(f"\n{'='*60}")
-    print("完成！")
+    print("Complete!")
     print(f"{'='*60}")
-    print(f"  输出目录: {output_dir}")
-    print(f"  结果图: {output_dir / 'evaluation_summary.png'}")
-    print(f"  特征图: {output_dir / 'embedding_analysis.png'}")
-    print(f"  heatmap: {output_dir / 'grad_cam.png'}")
-    print(f"  Excel数据:")
+    print(f"  Output directory: {output_dir}")
+    print(f"  Summary plot: {output_dir / 'evaluation_summary.png'}")
+    print(f"  Embedding plot: {output_dir / 'embedding_analysis.png'}")
+    print(f"  Grad-CAM: {output_dir / 'grad_cam.png'}")
+    print(f"  Excel data:")
     print(f"    - {output_dir / 'metrics.xlsx'}")
     print(f"    - {output_dir / 'predictions.xlsx'}")
     print(f"    - {output_dir / 'confusion_matrix.xlsx'}")

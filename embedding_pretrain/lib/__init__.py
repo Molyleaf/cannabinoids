@@ -1,3 +1,3 @@
 """
-SimCLR 核心逻辑库
+SimCLR Core Logic Library
 """
