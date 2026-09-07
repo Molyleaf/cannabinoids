@@ -9,7 +9,7 @@ import numpy as np
 import ipywidgets as widgets
 from IPython.display import display, clear_output, HTML
 
-# ==================== 全局样式：Calibri + 下划线输入 ====================
+# ==================== Global Styles: Calibri + Underline Input ====================
 display(HTML("""
 <style>
     .widget-label, .widget-text, .widget-float, .widget-int, .widget-button,
@@ -38,7 +38,7 @@ display(HTML("""
     .widget-text input:focus, .widget-float input:focus, .widget-int input:focus {
         border-bottom: 1.5px solid #2c7fb8 !important;
     }
-    .output_area, .output_area pre, .output_area .output_text, 
+    .output_area, .output_area pre, .output_area .output_text,
     .output_area .stream, .output_area .stdout, .output_area .stderr {
         font-family: 'Calibri', 'Arial', sans-serif !important;
         font-size: 18px !important;
@@ -56,7 +56,7 @@ display(HTML("""
 </style>
 """))
 
-# ==================== 依赖检查 ====================
+# ==================== Dependency Check ====================
 try:
     from rdkit import Chem
     from rdkit.Chem import DataStructs
@@ -67,7 +67,7 @@ except ImportError:
     print("[WARN] rdkit not installed. Structure similarity will be disabled.")
 
 
-# ==================== 数据类 ====================
+# ==================== Data Classes ====================
 class SpectraEntry:
     def __init__(self):
         self.name = ""
@@ -150,7 +150,7 @@ class MSPParser:
         return entries
 
 
-# ==================== 核心库构建 ====================
+# ==================== Core Library Builder ====================
 class NegativeLibraryBuilder:
     def __init__(self, target_category: str, target_smiles: str, target_mw: float, target_count: int):
         self.target_category = target_category
@@ -170,21 +170,21 @@ class NegativeLibraryBuilder:
         matrix_path = 'Matrix.msp'
         if os.path.exists(matrix_path):
             self.matrix_entries = MSPParser.parse_file(matrix_path)
-            self.log(f"  ✓ Matrix: {len(self.matrix_entries)} compounds")
+            self.log(f"  Matrix: {len(self.matrix_entries)} compounds")
         else:
-            self.log(f"  ⚠ Matrix.msp not found")
+            self.log(f"  Warning: Matrix.msp not found")
         nps_path = 'NPS.msp'
         if os.path.exists(nps_path):
             self.nps_entries = MSPParser.parse_file(nps_path)
-            self.log(f"  ✓ NPS: {len(self.nps_entries)} compounds")
+            self.log(f"  NPS: {len(self.nps_entries)} compounds")
         else:
-            self.log(f"  ⚠ NPS.msp not found")
+            self.log(f"  Warning: NPS.msp not found")
         mona_path = 'MONA.msp'
         if os.path.exists(mona_path):
             self.mona_entries = MSPParser.parse_file(mona_path)
-            self.log(f"  ✓ MONA: {len(self.mona_entries)} compounds")
+            self.log(f"  MONA: {len(self.mona_entries)} compounds")
         else:
-            self.log(f"  ⚠ MONA.msp not found")
+            self.log(f"  Warning: MONA.msp not found")
 
     def find_csv_file(self) -> Optional[str]:
         neg_dir = 'Neg'
@@ -235,7 +235,7 @@ class NegativeLibraryBuilder:
                     if val:
                         val = val.strip('"\'')
                         exclude_names.add(val)
-            self.log(f"  ✓ Loaded {len(exclude_names)} exclusion names from {os.path.basename(csv_path)}")
+            self.log(f"  Loaded {len(exclude_names)} exclusion names from {os.path.basename(csv_path)}")
         except Exception as e:
             self.log(f"  [ERROR] Failed to read CSV: {e}")
         return exclude_names
@@ -270,67 +270,68 @@ class NegativeLibraryBuilder:
 
     def compute_combined_score(self, entry: SpectraEntry) -> float:
         """
-        计算综合评分：50% 分子量匹配度 + 50% 结构相似性
+        Compute combined score: 50% MW matching + 50% structural similarity
         """
         if entry.mw <= 0:
             return 0.0
         
-        # 分子量评分：高斯函数，sigma=30
+        # MW score: Gaussian function, sigma=30
         mw_score = math.exp(-((entry.mw - self.target_mw) ** 2) / (2 * 30 ** 2))
         
-        # 结构相似性评分
+        # Structural similarity score
         sim_score = self.calculate_similarity(self.target_smiles, entry.smiles)
         
-        # 各占50%
+        # 50% each
         combined_score = 0.5 * mw_score + 0.5 * sim_score
         return combined_score
 
-    def sample_with_expanding_mw_window(self, candidates: List[SpectraEntry], 
-                                         target_count: int, 
+    def sample_with_expanding_mw_window(self, candidates: List[SpectraEntry],
+                                         target_count: int,
                                          initial_window: int = 20,
                                          max_window: int = 500,
                                          step: int = 25) -> List[SpectraEntry]:
         """
-        使用逐步扩大的分子量窗口进行采样，窗口可无限扩大至 max_window
+        Sample using a progressively expanding molecular weight window.
+        The window can expand infinitely up to max_window.
         
         Args:
-            candidates: 候选化合物列表
-            target_count: 目标采样数量
-            initial_window: 初始分子量窗口 (±20 Da)
-            max_window: 最大分子量窗口 (±500 Da)
-            step: 每次扩大的步长 (25 Da)
+            candidates: List of candidate compounds
+            target_count: Target number of samples
+            initial_window: Initial MW window (±20 Da)
+            max_window: Maximum MW window (±500 Da)
+            step: Step size for each expansion (25 Da)
         """
         if not candidates or target_count <= 0:
             return []
         
-        # 按综合评分排序（各占50%）
+        # Sort by combined score (50% MW + 50% similarity)
         scored = []
         for entry in candidates:
             score = self.compute_combined_score(entry)
             scored.append((entry, score))
         scored.sort(key=lambda x: x[1], reverse=True)
         
-        # 逐步扩大窗口
+        # Gradually expand window
         window = initial_window
         while window <= max_window:
             lower = self.target_mw - window
             upper = self.target_mw + window
             
-            # 筛选在当前窗口内的化合物
+            # Filter candidates within current window
             window_candidates = [(e, s) for e, s in scored if lower <= e.mw <= upper]
             
             if len(window_candidates) >= target_count:
-                # 从窗口内候选化合物中按综合评分采样
-                selected = random.sample([e for e, _ in window_candidates[:target_count * 3]], 
+                # Sample from window candidates by combined score
+                selected = random.sample([e for e, _ in window_candidates[:target_count * 3]],
                                           min(target_count, len(window_candidates)))
                 self.log(f"  Sampled {len(selected)} compounds within ±{window} Da window")
                 return selected
             
-            # 当前窗口不够，扩大
+            # Current window insufficient, expand
             window += step
             self.log(f"  Expanding MW window to ±{window} Da...")
         
-        # 如果达到最大窗口仍不够，返回所有可用候选
+        # If max window reached and still insufficient, return all available
         self.log(f"  Warning: Only {len(scored)} compounds available within ±{max_window} Da")
         return [e for e, _ in scored[:target_count]]
 
@@ -338,7 +339,7 @@ class NegativeLibraryBuilder:
         self.load_libraries()
         exclude_names = self.load_exclusion_names()
         
-        # Step 1: 全部纳入 Matrix
+        # Step 1: Include all Matrix compounds
         selected = list(self.matrix_entries)
         self.log(f"\n[Step 1] Include Matrix: {len(selected)} compounds")
         
@@ -353,7 +354,7 @@ class NegativeLibraryBuilder:
         self.log(f"  Target MW: {self.target_mw}")
         self.log(f"  MW weight: 50%, Similarity weight: 50%")
         
-        # Step 2: NPS 采样（排除目标类别后，使用综合评分 + 扩大窗口）
+        # Step 2: NPS sampling (after excluding target category, using combined score + expanding window)
         self.log("\n[Step 2] NPS sampling (50% MW + 50% similarity)...")
         nps_candidates = []
         for entry in self.nps_entries:
@@ -365,7 +366,7 @@ class NegativeLibraryBuilder:
         
         self.log(f"  NPS candidates (with MW): {len(nps_candidates)}")
         
-        # NPS 和 MONA 各占一半
+        # NPS and MONA each contribute half
         nps_target = remaining // 2
         mona_target = remaining - nps_target
         
@@ -380,7 +381,7 @@ class NegativeLibraryBuilder:
         remaining_after_nps = self.target_count - current_count
         self.log(f"  Cumulative: {current_count}, remaining: {remaining_after_nps}")
         
-        # Step 3: MONA 采样（使用综合评分 + 扩大窗口）
+        # Step 3: MONA sampling (using combined score + expanding window)
         self.log("\n[Step 3] MONA sampling (50% MW + 50% similarity)...")
         if self.mona_entries and remaining_after_nps > 0:
             mona_candidates = []
@@ -397,13 +398,13 @@ class NegativeLibraryBuilder:
             selected.extend(sampled_mona)
             self.log(f"  MONA sampled: {len(sampled_mona)} compounds")
         
-        # 最终裁剪
+        # Final trimming
         if len(selected) > self.target_count:
             selected = random.sample(selected, self.target_count)
         elif len(selected) < self.target_count:
             self.log(f"\n[WARN] Only {len(selected)} compounds available, target {self.target_count}")
         
-        # 最终统计
+        # Final statistics
         final_mws = [e.mw for e in selected if e.mw > 0]
         if final_mws:
             final_avg = np.mean(final_mws)
@@ -438,7 +439,7 @@ def create_labeled_input(label_text, input_widget, width='500px'):
     ))
 
 
-def build_library_callback(target_category, target_smiles, target_mw, target_count, 
+def build_library_callback(target_category, target_smiles, target_mw, target_count,
                            output, seed, output_area):
     random.seed(seed)
     np.random.seed(seed)
@@ -467,7 +468,7 @@ def build_library_callback(target_category, target_smiles, target_mw, target_cou
 
 def create_ui():
     category_input = widgets.Text(value='Cathinone', placeholder='e.g., Cathinone')
-    smiles_input = widgets.Text(value='C[C@@H](C(=O)C1=CC=CC=C1)N', 
+    smiles_input = widgets.Text(value='C[C@@H](C(=O)C1=CC=CC=C1)N',
                                 placeholder='Enter target compound SMILES')
     mw_input = widgets.FloatText(value=230.0, placeholder='e.g., 230.0')
     count_input = widgets.IntText(value=2000, placeholder='e.g., 2000')
