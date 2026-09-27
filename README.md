@@ -93,7 +93,8 @@ See [Docker](#docker) for further details, and [Installation](#installation) onl
 ## Requirements
 
 - Python `>=3.13` as declared in `pyproject.toml`.
-- CPU inference is supported. CUDA is recommended for pretraining and fine-tuning.
+- Tested on Windows 11 (Python 3.13.14) and Linux (Debian 13 "trixie" inside the Docker image, CPU-only PyTorch). Development and training used `torch 2.13.0` (CUDA 13.0), `streamlit 1.59.2`, and `ms-entropy 1.5.2`.
+- No non-standard hardware is required for deployment: inference runs on any modern x86-64 CPU. CUDA GPUs only accelerate pretraining and fine-tuning (the documented configuration used two-GPU DDP).
 - Docker is the recommended way to deploy the application in all cases; a prebuilt image is published on Docker Hub (see [Quick start with Docker](#quick-start-with-docker)). A native installation is intended for development, training, and analysis, or for hosts where Docker is unavailable.
 - Full training and analysis also use `pandas`, `pyarrow`, `scikit-learn`, `seaborn`, and `tqdm`; these training-only packages are not all listed in the core `pyproject.toml` dependency section.
 
@@ -146,6 +147,8 @@ An optional `uv` workflow is also supported because dependency groups and a PyTo
 uv sync --group deploy
 uv sync --group deploy --group dev
 ```
+
+Typical install time on a "normal" desktop computer: about 2–5 minutes with Docker (the image pull is ≈325 MB compressed), or about 10–15 minutes for a native install, dominated by downloading the PyTorch wheels.
 
 ## Required runtime artifacts
 
@@ -233,6 +236,8 @@ Workflow in the browser:
 3. Choose whether to consent to data sharing.
 4. Upload an `.msp` or `.mgf` file.
 5. Inspect the prediction, cleaned spectrum, probabilities, and retrieval result.
+
+Expected run time for the demo on a "normal" desktop computer: server startup takes about 10 seconds, and each single-spectrum prediction (binary or nine-class, including entropy retrieval) completes in well under 1 second on CPU.
 
 ## Run inference from Python
 
