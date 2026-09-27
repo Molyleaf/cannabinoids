@@ -28,15 +28,15 @@ This model is intended for screening and triage only. It is not a confirmatory a
 - **Shared by [optional]:** `[More Information Needed]`
 - **Model type:** Supervised 1D CNN encoder plus an MLP binary classification head; five-fold ensemble at inference
 - **Language(s) (NLP):** Not applicable (mass-spectrometry data)
-- **License:** `[More Information Needed]`; no license is declared in `pyproject.toml` or elsewhere in the repository
+- **License:** Apache License 2.0, as declared by the `LICENSE` file at the repository root (`pyproject.toml` itself declares no license metadata)
 - **Finetuned from model [optional]:** Shared SimCLR mass-spectrum encoder. The formal finetune script defaults to `embedding_pretrain/results_20260725_095428/best_model.pt`.
 - **Repository snapshot used for this card:** 2026-09-27
 
-The model weights are not stored in this repository snapshot. The repository ignores `*.pt` and `*.safetensors` files.
+The five deployment artifacts `official_ensemble_fold_1.safetensors` through `official_ensemble_fold_5.safetensors` are committed under `app/models/` in this repository, so the weights can be loaded directly from a source checkout.
 
 ### Model Sources [optional]
 
-- **Repository:** `E:\cannabinoids-master`
+- **Repository:** https://github.com/Molyleaf/cannabinoids (pin the reviewed release tag or commit hash at publication)
 - **Paper [optional]:** `[More Information Needed]`
 - **Demo [optional]:** Streamlit application in `app/streamlit/app.py`
 
@@ -112,7 +112,7 @@ Use this model only as one component of an expert-reviewed workflow. Recalibrate
 
 ## How to Get Started with the Model
 
-The easiest way to run the application that serves this model is the prebuilt Docker image [`molyleaf/cannabinoids`](https://hub.docker.com/repository/docker/molyleaf/cannabinoids), which bundles the weights and the entropy-search index; Docker deployment is recommended in all cases (see the repository README). To use the weights directly, the repository expects five deployment artifacts named `official_ensemble_fold_1.safetensors` through `official_ensemble_fold_5.safetensors` in the selected model directory. The training code can also load compatible `.pt` checkpoints.
+The easiest way to run the application that serves this model is the prebuilt Docker image [`molyleaf/cannabinoids`](https://hub.docker.com/r/molyleaf/cannabinoids), which bundles the weights and the entropy-search index; Docker deployment is recommended in all cases (see the repository README). To use the weights directly, the repository expects five deployment artifacts named `official_ensemble_fold_1.safetensors` through `official_ensemble_fold_5.safetensors` in the selected model directory. The training code can also load compatible `.pt` checkpoints.
 
 ```python
 from app.models.loader import get_ensemble_models, predict_risk_ensemble
@@ -227,7 +227,7 @@ Test confusion matrix at threshold `0.50`:
 | Actual NSC | 304 | 10 |
 | Actual SC | 11 | 200 |
 
-These are internal results from recorded project artifacts. They were not rerun while creating this model card because the weights and raw datasets are absent from the repository snapshot.
+These are internal results from recorded project artifacts. They were not rerun while creating this model card because the original labeled datasets are absent from the repository snapshot.
 
 #### Summary
 
@@ -293,7 +293,7 @@ No paper or formal model citation is recorded.
 
 ## More Information [optional]
 
-This card was derived from repository code and recorded artifacts on 2026-09-27. The model weights, original training spectra, processed Parquet data, and exact run metadata are not included in the repository snapshot. The card intentionally marks those items as missing rather than inferring unsupported values.
+This card was derived from repository code and recorded artifacts on 2026-09-27. The original training spectra, processed Parquet data, and exact run metadata are not included in the repository snapshot; the five deployment weights under `app/models/` are committed. The card intentionally marks unavailable items as missing rather than inferring unsupported values.
 
 ## Model Card Authors [optional]
 

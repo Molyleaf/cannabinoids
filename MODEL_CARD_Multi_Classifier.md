@@ -38,15 +38,15 @@ The training notebook selected Fold 2 as the final checkpoint because it had the
 - **Shared by [optional]:** `[More Information Needed]`
 - **Model type:** Supervised 1D CNN encoder plus an MLP nine-class classification head
 - **Language(s) (NLP):** Not applicable (mass-spectrometry data)
-- **License:** `[More Information Needed]`; no license is declared in `pyproject.toml` or elsewhere in the repository
-- **Finetuned from model [optional]:** A shared SimCLR mass-spectrum encoder. The notebook run recorded `D:\DL\cann\建模\best_model_0725.pt`; matching pretraining code is under `embedding_pretrain/`.
+- **License:** Apache License 2.0, as declared by the `LICENSE` file at the repository root (`pyproject.toml` itself declares no license metadata)
+- **Finetuned from model [optional]:** A shared SimCLR mass-spectrum encoder. The notebook run recorded the pretrained checkpoint `best_model_0725.pt` loaded from a local data directory outside the repository (see `multi_classifier/model.ipynb`); matching pretraining code is under `embedding_pretrain/`.
 - **Repository snapshot used for this card:** 2026-09-27
 
-The model weights are not stored in this repository snapshot. The repository ignores `*.pt` and `*.safetensors` files.
+The deployment checkpoint `app/models/best_multi_class_model_20260725_172011.pt` is committed in this repository, so the model can be loaded directly from a source checkout.
 
 ### Model Sources [optional]
 
-- **Repository:** `E:\cannabinoids-master`
+- **Repository:** https://github.com/Molyleaf/cannabinoids (pin the reviewed release tag or commit hash at publication)
 - **Paper [optional]:** `[More Information Needed]`
 - **Demo [optional]:** Streamlit application in `app/streamlit/app.py`
 
@@ -108,7 +108,7 @@ The training notebook displayed Chinese labels for several categories. `app/mode
 
 The training notebook saved `best_multi_class_model_<timestamp>.pt`, `best_multi_class_model_weights_<timestamp>.pt`, and `best_multi_class_model_latest.pt`.
 
-The recommended way to run the application that hosts this model is the prebuilt Docker image [`molyleaf/cannabinoids`](https://hub.docker.com/repository/docker/molyleaf/cannabinoids), which bundles the committed weights and the entropy-search index; Docker deployment is recommended in all cases (see the repository README).
+The recommended way to run the application that hosts this model is the prebuilt Docker image [`molyleaf/cannabinoids`](https://hub.docker.com/r/molyleaf/cannabinoids), which bundles the committed weights and the entropy-search index; Docker deployment is recommended in all cases (see the repository README).
 
 ## Uses
 
@@ -190,7 +190,7 @@ print({
 
 ### Training Data
 
-The notebook run loaded nine category databases from `D:\DL\cann\建模`:
+The notebook run (`multi_classifier/model.ipynb`) loaded nine category databases from a local data directory outside the repository:
 
 | Class | Total compounds | Train | Test |
 |---|---:|---:|---:|
@@ -205,7 +205,7 @@ The notebook run loaded nine category databases from `D:\DL\cann\建模`:
 | Tryptamines | 158 | 127 | 31 |
 | **Total** | **3,813** | **3,055** | **758** |
 
-The recorded output reports 3,813 compounds and 3,813 spectra. The exact source database files and spectra are not included in the repository snapshot.
+The recorded output reports 3,813 compounds and 3,813 spectra. The nine MSP database files are excluded from the repository by the `*.msp` rule in `.gitignore` and must be supplied separately for reproduction.
 
 The first split reserves 20% of each class for the test set. The remaining 3,055 training spectra are divided into five folds with approximately 2,439-2,447 training spectra and 608-616 validation spectra per fold.
 
@@ -353,7 +353,7 @@ No paper or formal model citation is recorded.
 
 ## More Information [optional]
 
-This card was derived from repository code and recorded notebook output on 2026-09-27. The model weights, source databases, processed tensors, and exact run metadata are not included in the repository snapshot. The card intentionally distinguishes recorded results from deployment claims and marks unavailable evidence as missing.
+This card was derived from repository code and recorded notebook output on 2026-09-27. The source databases, processed tensors, and exact run metadata are not included in the repository snapshot; the deployment checkpoint under `app/models/` is committed. The card intentionally distinguishes recorded results from deployment claims and marks unavailable evidence as missing.
 
 ## Model Card Authors [optional]
 

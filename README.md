@@ -2,7 +2,7 @@
 
 A reproducible, end-to-end mass-spectrometry toolkit for detecting and categorizing new psychoactive substances (NPS). The project combines SimCLR representation pretraining, supervised binary and multi-class classifiers, and FlashEntropySearch library matching in a Streamlit application.
 
-> **Reviewer note:** The source tree is directly inspectable, but the large source/reference spectra, preprocessed Parquet files, and prebuilt entropy-search index are intentionally excluded by `.gitignore`. Complete instructions for placing or rebuilding these artifacts are provided below. A release archive intended for reviewers should include the source archive plus the model/data artifacts listed in [Required runtime artifacts](#required-runtime-artifacts). A ready-to-run Docker image is published on Docker Hub and is the recommended way to obtain a working deployment in all cases (see [Quick start with Docker](#quick-start-with-docker)).
+> **Reviewer note:** The source tree is directly inspectable, but the large source/reference spectra, preprocessed Parquet files, and prebuilt entropy-search index are intentionally excluded by `.gitignore`. Complete instructions for placing or rebuilding these artifacts are provided below. A release archive intended for reviewers should include the source archive plus the model/data artifacts listed in [Required runtime artifacts](#required-runtime-artifacts). A ready-to-run Docker image is published on Docker Hub and is the recommended way to obtain a working deployment in all cases (see [Quick start with Docker](#quick-start-with-docker)). The source repository is published at [github.com/Molyleaf/cannabinoids](https://github.com/Molyleaf/cannabinoids).
 
 ## Contents
 
@@ -25,7 +25,7 @@ A reproducible, end-to-end mass-spectrometry toolkit for detecting and categoriz
 
 ## Quick start with Docker
 
-**Docker deployment is recommended in all cases.** A prebuilt, deployable image is published at [hub.docker.com/r/molyleaf/cannabinoids](https://hub.docker.com/repository/docker/molyleaf/cannabinoids). It pins the Python version and every dependency, and bundles the application code, the model weights, and the prebuilt entropy-search index, so no artifact staging or local environment setup is required. The currently recommended tag is `1.0.6`; all published tags are versioned (there is no `latest` tag).
+**Docker deployment is recommended in all cases.** A prebuilt, deployable image is published at [hub.docker.com/r/molyleaf/cannabinoids](https://hub.docker.com/r/molyleaf/cannabinoids). It pins the Python version and every dependency, and bundles the application code, the model weights, and the prebuilt entropy-search index, so no artifact staging or local environment setup is required. The currently recommended tag is `1.0.6`; all published tags are versioned (there is no `latest` tag).
 
 ```bash
 docker pull molyleaf/cannabinoids:1.0.6
@@ -86,8 +86,9 @@ See [Docker](#docker) for further details, and [Installation](#installation) onl
 ├── multi_classifier/            # Nine-class experiment notebook
 ├── pca/ and heatmap/            # Optional embedding/attribution analyses
 ├── scratch/                     # Diagnostic and evaluation scripts
-├── Modelcard.md                 # Model-card template/notes
-└── pyproject.toml               # Core Python dependency definition
+├── MODEL_CARD_Classifier.md       # Binary-classifier model card
+├── MODEL_CARD_Multi_Classifier.md # Nine-class model card
+└── pyproject.toml                 # Core Python dependency definition
 ```
 
 ## Requirements
@@ -105,8 +106,8 @@ See [Docker](#docker) for further details, and [Installation](#installation) onl
 ### Linux or macOS
 
 ```bash
-git clone <repository-url>
-cd cannabinoids-master
+git clone https://github.com/Molyleaf/cannabinoids.git
+cd cannabinoids
 
 python3.13 -m venv .venv
 source .venv/bin/activate
@@ -121,8 +122,8 @@ python -m pip install pandas pyarrow scikit-learn seaborn tqdm openpyxl
 ### Windows PowerShell
 
 ```powershell
-git clone <repository-url>
-cd cannabinoids-master
+git clone https://github.com/Molyleaf/cannabinoids.git
+cd cannabinoids
 
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -173,7 +174,7 @@ Model-loading behavior:
 - With no valid binary model file, the application raises `FileNotFoundError`.
 - The multi-class loader searches for `best_multi_class_model_*.pt`, `best_multi_class_model_*.safetensors`, `*multi_class*.pt`, and `*multi_class*.safetensors` in `app/models/`.
 
-If model weights are distributed separately, add their download URL and SHA-256 checksums to the release bundle. Do not commit large weights directly unless the repository's storage policy permits it.
+If model weights are replaced by retrained checkpoints, document their download URL and SHA-256 checksums in the release bundle. The deployment weights themselves are committed under `app/models/` in this repository.
 
 ## Build the library-search index
 
@@ -459,7 +460,7 @@ The script writes `official_ensemble_fold_1.safetensors` through `official_ensem
 
 ### 6. Train the nine-class model and run optional analyses
 
-- Open `multi_classifier/多分类.ipynb` to reproduce nine-class training and prediction.
+- Open `multi_classifier/model.ipynb` to reproduce nine-class training and prediction. The notebook records historical local input paths for the nine category databases and the pretrained encoder; update them to your local paths before running (the databases are not part of the repository).
 - Use `pca/降维聚类.py` for PCA/t-SNE embedding visualization and model summaries.
 - Use `heatmap/grad ana.py` for gradient-based spectral attribution.
 - Use scripts under `scratch/` and `finetune/scratch/` for diagnostics and threshold analyses.
@@ -472,7 +473,7 @@ Docker deployment is recommended in all cases.
 
 ### Option 1 — Use the prebuilt image (recommended)
 
-The deployable image is published at [hub.docker.com/r/molyleaf/cannabinoids](https://hub.docker.com/repository/docker/molyleaf/cannabinoids). Versioned tags are `1.0.0` through `1.0.6`; the currently recommended tag is `1.0.6`. The image is self-contained: it bundles the application, the `common/` package, the committed model weights in `app/models/`, and the prebuilt FlashEntropySearch index, and it runs as an unprivileged user.
+The deployable image is published at [hub.docker.com/r/molyleaf/cannabinoids](https://hub.docker.com/r/molyleaf/cannabinoids). Versioned tags are `1.0.0` through `1.0.6`; the currently recommended tag is `1.0.6`. The image is self-contained: it bundles the application, the `common/` package, the committed model weights in `app/models/`, and the prebuilt FlashEntropySearch index, and it runs as an unprivileged user.
 
 ```bash
 docker pull molyleaf/cannabinoids:1.0.6
@@ -536,15 +537,18 @@ For direct reproduction of the reported binary result, rerun preprocessing, fine
 
 - The current `.gitignore` excludes `data_source/`, `data_preprocessed/`, `*.npy`, `*.msp`, `*.xlsx`, and `*.parquet`, including the generated index directory `app/cache/positive_idx/`. The application model weights under `app/models/` are committed, so inference can be reproduced from a source checkout once the entropy-search index is rebuilt from a separately supplied positive library (see [Build the library-search index](#build-the-library-search-index)) or obtained from the prebuilt Docker image. Full training reproduction additionally requires the original labeled datasets.
 - Exact GPU/CUDA versions, nondeterministic GPU kernels, and library versions can cause small numerical differences. Split seed `42` controls the documented binary train/validation/test partition.
-- The current checkout has no configured Git remote. Before submission, publish the repository or release bundle and replace `<repository-url>` with the durable URL.
+- The repository is published at [github.com/Molyleaf/cannabinoids](https://github.com/Molyleaf/cannabinoids). For submission, archive the exact reviewed version (a tagged release with its commit hash) under a durable DOI (for example via Zenodo) and cite it in the code-availability statement.
 - The UI accepts `.mgf`, but the parser is primarily MSP-compatible as noted above.
 - Model confidence and entropy similarity are decision-support outputs, not definitive forensic identifications.
 - The nine-class OOD rule (`confidence < 0.98`) and binary threshold (`0.50`) are application defaults; validate them on the target instrument and dataset before operational use.
 
 ## Data privacy, citation, and license
 
-- If the user does **not** consent to data sharing, the application does not persist uploaded spectra.
-- If consent is given, contributions are appended to `app/data_queue/authorized_contributions.jsonl`; binary probabilities in `[0.3, 0.7]` are additionally placed in `app/data_queue/uncertain_samples.jsonl` for manual review.
-- Do not publish raw spectra or contributor information without appropriate consent and institutional approval.
-- Add the article citation, dataset DOI, model-weight DOI/URL, repository commit hash, and a software license before the public/reviewer release. No license file is included in the current source tree.
+- If the user does **not** consent to data sharing, the application does not persist uploaded spectra; it only returns the detection result.
+- If consent is given, a contribution record (timestamp, file name, optional contributor name and e-mail, model type, probability, and predicted result) is appended to `app/data_queue/authorized_contributions.jsonl`; binary probabilities in `[0.3, 0.7]` are additionally placed, together with the raw peak list, in `app/data_queue/uncertain_samples.jsonl` for manual review.
+- The queue files are runtime-only: `.gitignore` excludes `app/data_queue/*.json` and `app/data_queue/*.jsonl` (only `.gitkeep` is tracked), so consented contributions stay on the host and are never committed or transmitted by the application. Do not publish raw spectra or contributor information without appropriate consent and institutional approval.
+- Model documentation is provided in `MODEL_CARD_Classifier.md` and `MODEL_CARD_Multi_Classifier.md`; their citation and author fields remain `[More Information Needed]` placeholders pending publication.
+- The canonical source location is [github.com/Molyleaf/cannabinoids](https://github.com/Molyleaf/cannabinoids). Still to add before the public/reviewer release: the article citation, dataset DOI, and a durable DOI for the exact reviewed code version (for example a Zenodo archive of the tagged release with its commit hash). No paper or dataset DOI is registered yet.
+- The software in this repository is licensed under the **Apache License 2.0** ([LICENSE](LICENSE)); unless stated otherwise, this covers the repository's own code, documentation, and the committed model weights in `app/models/`. It does not cover third-party data.
+- `NIST/dataset1/` and `NIST/dataset2/` redistribute third-party spectral libraries in NIST MS Search user-library format (`dataset1` self-identifies as Cayman Spectral Library `v04092026` in its `ChangeLog.txt`). These files remain subject to their upstream license terms and are not relicensed by Apache-2.0; verify redistribution rights before publishing them.
 - The checklist reference provided with this submission is licensed under CC BY 4.0; that checklist license does not automatically license this software or its datasets.
