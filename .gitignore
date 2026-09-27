@@ -54,9 +54,7 @@ data_source/
 data_preprocessed/
 
 *.npy
-*.pt
 *.msp
-*.safetensors
 *.xlsx
 *.parquet
 
@@ -70,4 +68,4 @@ results_*
 # Dynamic runtime data queue
 app/data_queue/*.json
 app/data_queue/*.jsonl
-!app/data_queue/.gitkeep
+!app/data_queue/.gitkeep
