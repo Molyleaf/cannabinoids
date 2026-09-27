@@ -108,6 +108,8 @@ The training notebook displayed Chinese labels for several categories. `app/mode
 
 The training notebook saved `best_multi_class_model_<timestamp>.pt`, `best_multi_class_model_weights_<timestamp>.pt`, and `best_multi_class_model_latest.pt`.
 
+The recommended way to run the application that hosts this model is the prebuilt Docker image [`molyleaf/cannabinoids`](https://hub.docker.com/repository/docker/molyleaf/cannabinoids), which bundles the committed weights and the entropy-search index; Docker deployment is recommended in all cases (see the repository README).
+
 ## Uses
 
 ### Direct Use

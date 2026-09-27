@@ -2,10 +2,11 @@
 
 A reproducible, end-to-end mass-spectrometry toolkit for detecting and categorizing new psychoactive substances (NPS). The project combines SimCLR representation pretraining, supervised binary and multi-class classifiers, and FlashEntropySearch library matching in a Streamlit application.
 
-> **Reviewer note:** The source tree is directly inspectable, but the large model weights, source/reference spectra, preprocessed Parquet files, and prebuilt entropy-search index are intentionally excluded by `.gitignore`. Complete instructions for placing or rebuilding these artifacts are provided below. A release archive intended for reviewers should include the source archive plus the model/data artifacts listed in [Required runtime artifacts](#required-runtime-artifacts).
+> **Reviewer note:** The source tree is directly inspectable, but the large source/reference spectra, preprocessed Parquet files, and prebuilt entropy-search index are intentionally excluded by `.gitignore`. Complete instructions for placing or rebuilding these artifacts are provided below. A release archive intended for reviewers should include the source archive plus the model/data artifacts listed in [Required runtime artifacts](#required-runtime-artifacts). A ready-to-run Docker image is published on Docker Hub and is the recommended way to obtain a working deployment in all cases (see [Quick start with Docker](#quick-start-with-docker)).
 
 ## Contents
 
+- [Quick start with Docker](#quick-start-with-docker)
 - [Scientific workflow](#scientific-workflow)
 - [Repository layout](#repository-layout)
 - [Requirements](#requirements)
@@ -21,6 +22,28 @@ A reproducible, end-to-end mass-spectrometry toolkit for detecting and categoriz
 - [Verification checklist for reviewers](#verification-checklist-for-reviewers)
 - [Reproducibility notes and limitations](#reproducibility-notes-and-limitations)
 - [Data privacy, citation, and license](#data-privacy-citation-and-license)
+
+## Quick start with Docker
+
+**Docker deployment is recommended in all cases.** A prebuilt, deployable image is published at [hub.docker.com/r/molyleaf/cannabinoids](https://hub.docker.com/repository/docker/molyleaf/cannabinoids). It pins the Python version and every dependency, and bundles the application code, the model weights, and the prebuilt entropy-search index, so no artifact staging or local environment setup is required. The currently recommended tag is `1.0.6`; all published tags are versioned (there is no `latest` tag).
+
+```bash
+docker pull molyleaf/cannabinoids:1.0.6
+docker run --rm -p 8001:8001 molyleaf/cannabinoids:1.0.6
+```
+
+Open `http://localhost:8001/cannabinoids` and upload an MSP file.
+
+To substitute newer checkpoints or a rebuilt library index, mount them read-only over the in-image copies:
+
+```bash
+docker run --rm -p 8001:8001 \
+  -v "$(pwd)/app/models:/srv/cannabinoids/app/models:ro" \
+  -v "$(pwd)/app/cache/positive_idx:/srv/cannabinoids/app/cache/positive_idx:ro" \
+  molyleaf/cannabinoids:1.0.6
+```
+
+See [Docker](#docker) for further details, and [Installation](#installation) only if Docker is unavailable on your host or you need a native environment for development, training, and analysis.
 
 ## Scientific workflow
 
@@ -71,10 +94,12 @@ A reproducible, end-to-end mass-spectrometry toolkit for detecting and categoriz
 
 - Python `>=3.13` as declared in `pyproject.toml`.
 - CPU inference is supported. CUDA is recommended for pretraining and fine-tuning.
-- Docker is optional for application deployment.
+- Docker is the recommended way to deploy the application in all cases; a prebuilt image is published on Docker Hub (see [Quick start with Docker](#quick-start-with-docker)). A native installation is intended for development, training, and analysis, or for hosts where Docker is unavailable.
 - Full training and analysis also use `pandas`, `pyarrow`, `scikit-learn`, `seaborn`, and `tqdm`; these training-only packages are not all listed in the core `pyproject.toml` dependency section.
 
 ## Installation
+
+**Docker deployment is recommended in all cases** and requires none of the steps in this section — see [Quick start with Docker](#quick-start-with-docker). The native installation below is needed only for development, training, and analysis, or on hosts where Docker is unavailable.
 
 ### Linux or macOS
 
@@ -124,7 +149,7 @@ uv sync --group deploy --group dev
 
 ## Required runtime artifacts
 
-The application cannot perform inference from source code alone. Place the following artifacts in these exact locations before starting the UI:
+The application cannot perform inference from source code alone. This section applies to native deployments from a source checkout; the prebuilt Docker image already bundles the weights and index described here. Place the following artifacts in these exact locations before starting the UI:
 
 ```text
 app/models/
@@ -438,28 +463,51 @@ These notebooks/scripts contain some historical paths. Review and update input/o
 
 ## Docker
 
+Docker deployment is recommended in all cases.
+
+### Option 1 — Use the prebuilt image (recommended)
+
+The deployable image is published at [hub.docker.com/r/molyleaf/cannabinoids](https://hub.docker.com/repository/docker/molyleaf/cannabinoids). Versioned tags are `1.0.0` through `1.0.6`; the currently recommended tag is `1.0.6`. The image is self-contained: it bundles the application, the `common/` package, the committed model weights in `app/models/`, and the prebuilt FlashEntropySearch index, and it runs as an unprivileged user.
+
+```bash
+docker pull molyleaf/cannabinoids:1.0.6
+docker run --rm -p 8001:8001 molyleaf/cannabinoids:1.0.6
+```
+
+Open `http://localhost:8001/cannabinoids`. No volume mounts are required.
+
+To run the image with locally supplied model weights or a rebuilt entropy index instead of the in-image copies, mount them read-only:
+
+```bash
+docker run --rm -p 8001:8001 \
+  -v "$(pwd)/app/models:/srv/cannabinoids/app/models:ro" \
+  -v "$(pwd)/app/cache/positive_idx:/srv/cannabinoids/app/cache/positive_idx:ro" \
+  molyleaf/cannabinoids:1.0.6
+```
+
+Note that the image does not contain the restricted source datasets (`data_source/` is excluded from the repository), so training data must still be provided separately for reproduction.
+
+### Option 2 — Build from source
+
 Build from the repository root:
 
 ```bash
 docker build -f app/Dockerfile -t nps-spectral-app .
 ```
 
-Run with locally supplied model weights and entropy index mounted read-only:
-
-```bash
-docker run --rm -p 8001:8001 \
-  -v "$(pwd)/app/models:/srv/cannabinoids/app/models:ro" \
-  -v "$(pwd)/app/cache/positive_idx:/srv/cannabinoids/app/cache/positive_idx:ro" \
-  nps-spectral-app
-```
-
-Open `http://localhost:8001/cannabinoids`.
-
-The Docker image contains the application and `common/` packages. It intentionally does not contain restricted datasets or model weights. For a completely self-contained reviewer image, build a release-specific Docker context or stage that includes the approved model/index artifacts.
+The build context includes whatever is currently present in `app/` and `common/` (there is no `.dockerignore`), so an image built from a complete working tree — with model weights in `app/models/` and the index in `app/cache/positive_idx/` — is self-contained in the same way as the published image. Run it with the same commands as above, substituting `nps-spectral-app` for `molyleaf/cannabinoids:1.0.6`.
 
 ## Verification checklist for reviewers
 
-A minimal independent execution check is:
+The fastest verification path uses the prebuilt Docker image, which is recommended in all cases:
+
+```bash
+docker run --rm -p 8001:8001 molyleaf/cannabinoids:1.0.6
+```
+
+Open `http://localhost:8001/cannabinoids`, upload a valid MSP record (see [Input format and example](#input-format-and-example)), and confirm that a prediction with probabilities is returned.
+
+For a source-level check of the repository itself, a minimal independent execution check is:
 
 ```bash
 python -c "from app.pipeline import run_pipeline; print(run_pipeline.__name__)"
@@ -481,7 +529,7 @@ For direct reproduction of the reported binary result, rerun preprocessing, fine
 
 ## Reproducibility notes and limitations
 
-- The current `.gitignore` excludes `data_source/`, `data_preprocessed/`, `*.msp`, `*.parquet`, `*.pt`, and `*.safetensors`. Source control alone therefore cannot reproduce inference or training without a separate artifact release.
+- The current `.gitignore` excludes `data_source/`, `data_preprocessed/`, `*.npy`, `*.msp`, `*.xlsx`, and `*.parquet`, including the generated index directory `app/cache/positive_idx/`. The application model weights under `app/models/` are committed, so inference can be reproduced from a source checkout once the entropy-search index is rebuilt from a separately supplied positive library (see [Build the library-search index](#build-the-library-search-index)) or obtained from the prebuilt Docker image. Full training reproduction additionally requires the original labeled datasets.
 - Exact GPU/CUDA versions, nondeterministic GPU kernels, and library versions can cause small numerical differences. Split seed `42` controls the documented binary train/validation/test partition.
 - The current checkout has no configured Git remote. Before submission, publish the repository or release bundle and replace `<repository-url>` with the durable URL.
 - The UI accepts `.mgf`, but the parser is primarily MSP-compatible as noted above.

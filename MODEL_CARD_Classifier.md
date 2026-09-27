@@ -112,7 +112,7 @@ Use this model only as one component of an expert-reviewed workflow. Recalibrate
 
 ## How to Get Started with the Model
 
-The repository expects five deployment artifacts named `official_ensemble_fold_1.safetensors` through `official_ensemble_fold_5.safetensors` in the selected model directory. The training code can also load compatible `.pt` checkpoints.
+The easiest way to run the application that serves this model is the prebuilt Docker image [`molyleaf/cannabinoids`](https://hub.docker.com/repository/docker/molyleaf/cannabinoids), which bundles the weights and the entropy-search index; Docker deployment is recommended in all cases (see the repository README). To use the weights directly, the repository expects five deployment artifacts named `official_ensemble_fold_1.safetensors` through `official_ensemble_fold_5.safetensors` in the selected model directory. The training code can also load compatible `.pt` checkpoints.
 
 ```python
 from app.models.loader import get_ensemble_models, predict_risk_ensemble

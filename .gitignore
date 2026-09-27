@@ -57,6 +57,7 @@ data_preprocessed/
 *.msp
 *.xlsx
 *.parquet
+*.pdf
 
 app/cache/positive_idx/
 
